@@ -38,7 +38,9 @@ local _, ns = ...
 ]]
 
 local ROWS = 20
-local MAX_PROFESSIONS = 12
+-- Gathering professions get no button in the recipes list. Their data stays: smelting
+-- still feeds crafting trees and the craft settings, herbs still go on the scan list.
+local UNLISTED = { Mining = true, Herbalism = true, Skinning = true }
 
 local function SignedMoney(copper)
   if not copper then return "-" end
@@ -497,20 +499,31 @@ function ns.UI.BuildRecipesPage(page)
     refresh()
   end)
   deButton:SetPoint("TOPLEFT", 0, -22)
+  -- one button per profession, made as needed (captured recipes can add professions,
+  -- e.g. Skinning, so the count isn't fixed); the settings button sits under the last
   local profButtons = {}
-  local settingsButton -- placed under the profession list, see below
-  for i = 1, MAX_PROFESSIONS do
-    local b = UI.Button(left, "", 126, function(self)
-      state.profName, state.cat = self.profName, 0
-      refresh()
-    end)
-    b:SetPoint("TOPLEFT", 0, -(i + 1) * 22)
-    b:Hide()
-    profButtons[i] = b
+  local listed = {} -- ns.professions minus UNLISTED, rebuilt on refresh
+  local settingsButton
+  local function ProfButton(i)
+    local b = profButtons[i]
+    if not b then
+      b = UI.Button(left, "", 126, function(self)
+        state.profName, state.cat = self.profName, 0
+        refresh()
+      end)
+      b:SetPoint("TOPLEFT", 0, -(i + 1) * 22)
+      b:Hide()
+      profButtons[i] = b
+    end
+    return b
   end
 
   settingsButton = UI.Button(left, "Craft settings...", 126, function(self) UI.ToggleCraftSettings(self) end)
-  settingsButton:SetPoint("TOPLEFT", 0, -(MAX_PROFESSIONS + 2) * 22 - 6)
+  local function PlaceSettingsButton()
+    settingsButton:ClearAllPoints()
+    settingsButton:SetPoint("TOPLEFT", 0, -(#listed + 2) * 22 - 6)
+  end
+  PlaceSettingsButton()
   settingsButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText("Craft settings")
@@ -752,8 +765,12 @@ function ns.UI.BuildRecipesPage(page)
   -- Refresh ------------------------------------------------------------------------------
   refresh = function()
     local prof
-    for i, button in ipairs(profButtons) do
-      local p = ns.professions[i]
+    wipe(listed)
+    for _, p in ipairs(ns.professions) do
+      if not UNLISTED[p.name] then listed[#listed + 1] = p end
+    end
+    for i = 1, math.max(#profButtons, #listed) do
+      local button, p = ProfButton(i), listed[i]
       if p then
         local skill = ns:ProfessionSkill(p.name)
         button.profName = p.name
@@ -772,6 +789,7 @@ function ns.UI.BuildRecipesPage(page)
         button:Hide()
       end
     end
+    PlaceSettingsButton()
     state.prof = prof
     wipe(shown)
     local showTrade, showDE = state.profName == TRADE, state.profName == DISENCHANT
