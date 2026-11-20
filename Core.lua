@@ -131,7 +131,7 @@ end
 -- Built from the data, so nothing a profession uses is missed, and it grows
 -- when ProfScan reads new recipes from your profession windows:
 --   settings.scanReagents  every reagent of every recipe, plus gathered herbs and fish
---   settings.scanTrade     trade company items (empty crates, sealed writs, crate fills, writ items)
+--   settings.scanTrade     trade company items (empty crates, sealed writs, crate fills, writs and their items)
 --   settings.scanProducts  every crafted product (off by default: mostly gear)
 -- plus Items.lua and what you added in game, minus what you removed.
 
@@ -165,7 +165,7 @@ function ns:RebuildItems()
       Add(c[1])
       for _, fill in ipairs(c[5]) do Add(fill[1]) end
     end
-    for _, w in ipairs(trade.writs) do Add(w[3]) end
+    for _, w in ipairs(trade.writs) do Add(w[3]); Add(w[8]) end -- the item asked for, and the writ itself
     for _, id in pairs(trade.sealedWrits) do Add(id) end
   end
   for id in pairs(s.scanAdd) do Add(id) end

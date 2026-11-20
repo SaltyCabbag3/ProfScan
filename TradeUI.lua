@@ -16,7 +16,16 @@ local _, ns = ...
     Writs   Craftsman's Writs: daily crafting orders that give reputation.
             Cost of the requested item(s), cost per 100 reputation, and
             whether this character knows a recipe for it. The tooltip says
-            where to deliver it, when known.
+            where to deliver it, when known, and what the writ itself costs.
+    Turn-ins  The writs grouped by the zone they are handed in (TradeData.lua, from
+            Wowhead's and conquestcapped's writ guides). Each writ is its own item on
+            the auction house, so a writ bought there costs its price plus the item
+            it asks for. Top: one row per zone (writs, how many are priced, the
+            reputation and cost of doing all priced ones, cost per 100 reputation,
+            and how many are good buys). Bottom: the selected zone's writs. Below
+            that, a route: the writs worth buying (cheaper per reputation than a
+            random writ from the cheapest Sealed Writ), grouped by continent, and
+            the best single stop. Each writ can be handed in once a day.
   Empty crates and sealed writs are items too, tradeable and sold on the
   auction house, so their price is part of the cost (the "Include crate/writ
   prices" box turns that off, e.g. if you loot your own). A sealed writ holds
@@ -47,6 +56,7 @@ local _, ns = ...
 
 local ROWS = 15
 local WRIT_ROWS = 14
+local ZONE_ROWS, ZONE_WRIT_ROWS = 7, 6
 
 -- Envelopes of a tier it takes to reach the reputation goal (nil when the goal is off).
 function ns:EnvelopesForGoal(rep)
@@ -61,6 +71,16 @@ function ns:CratesForGoal(favor)
   if goal > 0 and favor then return math.max(1, math.ceil(goal / favor)) end
 end
 local TIER_NAMES = { J = "Journeyman", E = "Expert", A = "Artisan" }
+local CONTINENTS = { EK = "Eastern Kingdoms", K = "Kalimdor" }
+local UNKNOWN_ZONE = "Zone not known yet"
+
+-- Where a writ is handed in, as a tooltip line.
+local function CustomerLine(w)
+  local zone, npc, unsure = w[6], w[7], w[9]
+  if zone == "" then return "Turn-in place not known yet" end
+  return ("Turn in to: %s, %s%s"):format(npc ~= "" and npc or "customer not known yet", zone,
+    unsure and " (unconfirmed)" or "")
+end
 
 -- AH price of an empty crate or a sealed writ, as counted in costs: price, state
 -- ("ah" | "unknown" = not scanned yet, counted as 0 | "off" = setting turned off).
@@ -192,7 +212,9 @@ function ns.UI.BuildTradePane(parent)
   local UI = ns.UI
   local data = ns.TRADE
   local state = { mode = "crates", prof = 0, craftableOnly = false,
-                  sort = { crates = { "perFavor", false }, writs = { "per100", false } } }
+                  zone = nil, -- turn-ins: selected zone
+                  sort = { crates = { "perFavor", false }, writs = { "per100", false },
+                           zones = { "per100", false }, zoneWrits = { "per100", false } } }
   local shownItems = {}
 
   local frame = CreateFrame("Frame", nil, parent)
@@ -221,10 +243,20 @@ function ns.UI.BuildTradePane(parent)
   cratesBtn:SetPoint("TOPLEFT", 0, -18)
   local writsBtn = UI.Button(frame, "Writs", 80, function() state.mode = "writs"; refresh() end)
   writsBtn:SetPoint("LEFT", cratesBtn, "RIGHT", 4, 0)
+  local zonesBtn = UI.Button(frame, "Turn-ins", 80, function() state.mode = "zones"; refresh() end)
+  zonesBtn:SetPoint("LEFT", writsBtn, "RIGHT", 4, 0)
+  zonesBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Turn-ins")
+    GameTooltip:AddLine("Writs by the zone they are handed in, what buying and filling them costs there, "
+      .. "and which zones are worth the trip.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  zonesBtn:SetScript("OnLeave", GameTooltip_Hide)
 
   -- Favor goal (crates mode)
   local goalLabel = UI.Text(frame, "GameFontNormalSmall")
-  goalLabel:SetPoint("LEFT", writsBtn, "RIGHT", 14, 0)
+  goalLabel:SetPoint("LEFT", zonesBtn, "RIGHT", 14, 0)
   goalLabel:SetText("Favor goal")
   local goalBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
   goalBox:SetSize(48, 18)
@@ -260,7 +292,7 @@ function ns.UI.BuildTradePane(parent)
     end
   end
   local profBtn = UI.Button(frame, "All professions", 130, nil)
-  profBtn:SetPoint("LEFT", writsBtn, "RIGHT", 12, 0)
+  profBtn:SetPoint("LEFT", zonesBtn, "RIGHT", 12, 0)
   profBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   profBtn:SetScript("OnClick", function(_, button)
     state.prof = (state.prof + (button == "RightButton" and -1 or 1)) % #professions
@@ -311,6 +343,30 @@ function ns.UI.BuildTradePane(parent)
     { title = "Per 100 rep", width = 70, justify = "RIGHT", key = "per100" },
     { title = "Craft", width = 36, key = "known" },
   }, WRIT_ROWS)
+  local zones = UI.CreateTable(frame, {
+    { title = "Turn-in zone", width = 160, key = "name" },
+    { title = "Continent", width = 106, key = "continent" },
+    { title = "Writs", width = 70, key = "writs" },
+    { title = "Priced", width = 50, justify = "RIGHT", key = "buyable" },
+    { title = "Rep", width = 44, justify = "RIGHT", key = "rep" },
+    { title = "Cost", width = 80, justify = "RIGHT", key = "cost" },
+    { title = "Per 100 rep", width = 76, justify = "RIGHT", key = "per100" },
+    { title = "Good buys", width = 64, justify = "RIGHT", key = "good" },
+  }, ZONE_ROWS)
+  local zoneWrits = UI.CreateTable(frame, {
+    { title = "Writ asks for", width = 160, key = "name" },
+    { title = "Profession", width = 80, key = "prof" },
+    { title = "Tier", width = 62, key = "tier" },
+    { title = "Customer", width = 130, key = "npc" },
+    { title = "Writ", width = 64, justify = "RIGHT", key = "writ" },
+    { title = "Item", width = 64, justify = "RIGHT", key = "cost" },
+    { title = "Per 100 rep", width = 72, justify = "RIGHT", key = "per100" },
+    { title = "Craft", width = 36, key = "known" },
+  }, ZONE_WRIT_ROWS)
+  local routeText = UI.Text(frame)
+  routeText:SetPoint("TOPLEFT", zoneWrits, "BOTTOMLEFT", 2, -2)
+  routeText:SetPoint("RIGHT", frame, "RIGHT")
+  routeText:SetJustifyV("TOP")
   -- expected cost of a sealed writ per tier (random writ inside)
   -- reputation goal (writs mode)
   local repLabel = UI.Text(frame, "GameFontNormalSmall")
@@ -340,8 +396,9 @@ function ns.UI.BuildTradePane(parent)
   tierSummary:SetPoint("TOPLEFT", repLabel, "BOTTOMLEFT", 0, -8)
   tierSummary:SetPoint("RIGHT", frame, "RIGHT")
   tierSummary:SetJustifyV("TOP")
-  for mode, list in pairs({ crates = crates, writs = writs }) do
-    list:SetPoint("TOPLEFT", 0, -44)
+  zoneWrits:SetPoint("TOPLEFT", zones, "BOTTOMLEFT", 0, -2)
+  for mode, list in pairs({ crates = crates, writs = writs, zones = zones, zoneWrits = zoneWrits }) do
+    if mode ~= "zoneWrits" then list:SetPoint("TOPLEFT", 0, -44) end
     list.emptyText = "Nothing matches."
     list.onSort = function(key)
       local s = state.sort[mode]
@@ -349,13 +406,16 @@ function ns.UI.BuildTradePane(parent)
       refresh()
     end
     list.onClick = function(row, button)
-      if button == "RightButton" then
-        ns:ReportScanAdd({ row.id })
+      if mode == "zones" then
+        state.zone = row.zone
+        refresh()
+      elseif button == "RightButton" then
+        ns:ReportScanAdd(row.scanIds or { row.id })
       elseif IsModifiedClick("CHATLINK") then
         UI.InsertItemLink(row.id)
       elseif mode == "crates" then
         ns:OpenCrate(row.crateIndex)
-      elseif mode == "writs" and ns.recipesByItem[row.id] then
+      elseif mode ~= "crates" and ns.recipesByItem[row.id] then
         ns:OpenRecipe(ns.recipesByItem[row.id][1])
       else
         ns:OpenItem(row.id)
@@ -439,7 +499,7 @@ function ns.UI.BuildTradePane(parent)
     local onlyProf = state.prof > 0 and professions[state.prof + 1]
     local values = ns:WritValues()
     for _, w in ipairs(data.writs) do
-      local prof, tier, item, skill, qty, deliver = w[1], w[2], w[3], w[4], w[5], w[6]
+      local prof, tier, item, skill, qty = w[1], w[2], w[3], w[4], w[5]
       local known = KnowsRecipeFor(item)
       if (not onlyProf or prof == onlyProf) and (not state.craftableOnly or known) then
         shownItems[#shownItems + 1] = item
@@ -450,12 +510,14 @@ function ns.UI.BuildTradePane(parent)
         local per100 = cost and (cost + sealed) / rep * 100
         local itemName = select(2, UI.ItemName(item))
         local value = values[tier]
+        local writPrice = ns:BuyPrice(w[8], 1) -- this exact writ, for the tooltip (see Turn-ins)
         rows[#rows + 1] = {
           id = item,
           icon = UI.GetItemIcon(item),
           tooltipLines = {
             ("Craftsman's Writ (%s, %d reputation)"):format(TIER_NAMES[tier], rep),
-            deliver ~= "" and ("Deliver to: " .. deliver) or "Delivery place not known yet",
+            CustomerLine(w),
+            writPrice and ("This writ itself costs %s on the auction house (see Turn-ins)"):format(ns.Money(writPrice)) or nil,
             "Cheapest way: " .. Via(node),
             sealedState == "ah" and ("A Sealed %s's Writ costs %s on the auction house (it holds a random %s writ)"):format(
               TIER_NAMES[tier], ns.Money(sealed), TIER_NAMES[tier])
@@ -482,6 +544,202 @@ function ns.UI.BuildTradePane(parent)
       end
     end
     return rows
+  end
+
+  -- Turn-ins -----------------------------------------------------------------------------
+  local function WritShown(w)
+    local onlyProf = state.prof > 0 and professions[state.prof + 1]
+    return (not onlyProf or w[1] == onlyProf) and (not state.craftableOnly or KnowsRecipeFor(w[3]))
+  end
+
+  -- One writ bought on the auction house and filled: its price plus the item's.
+  -- total is nil while either is unknown (a writ nobody lists can't be bought).
+  local function WritDeal(w)
+    local unit, _, node = ns:BestItemCost(w[3], w[5])
+    local item = unit and math.floor(unit * w[5] + 0.5)
+    local price, priceState = ns:TradeItemPrice(w[8])
+    local writ = priceState ~= "unknown" and price or nil
+    local rep = data.writRep[w[2]]
+    local total = item and writ and item + writ
+    return { item = item, writ = writ, writState = priceState, total = total, rep = rep,
+             per100 = total and total / rep * 100, node = node }
+  end
+
+  -- The cheapest Sealed Writ per 100 reputation (envelope + its tier's average item):
+  -- a specific writ is a good buy when it beats that. nil when not priced, or when
+  -- writ prices are not counted (you have your own writs).
+  local function EnvelopeCutoff()
+    if not ns.db.settings.countTradeItems then return nil end
+    local best
+    for tier, id in pairs(data.sealedWrits) do
+      local total, priced = 0, 0
+      for _, w in ipairs(data.writs) do
+        if w[2] == tier then
+          local unit = ns:BestItemCost(w[3], w[5])
+          if unit then total, priced = total + unit * w[5], priced + 1 end
+        end
+      end
+      local price = ns:BuyPrice(id, 1)
+      if price and priced > 0 then
+        local per = (price + total / priced) / data.writRep[tier] * 100
+        if not best or per < best.per then best = { per = per, tier = tier } end
+      end
+    end
+    return best
+  end
+
+  -- The shown writs grouped by turn-in zone.
+  local function ZoneData()
+    local list, byName = {}, {}
+    local cutoff = EnvelopeCutoff()
+    for _, w in ipairs(data.writs) do
+      if WritShown(w) then
+        local name = w[6] ~= "" and w[6] or UNKNOWN_ZONE
+        local z = byName[name]
+        if not z then
+          z = { name = name, continent = data.zoneContinent[name], writs = {}, tiers = { J = 0, E = 0, A = 0 },
+                buyable = 0, rep = 0, cost = 0, good = 0, goodRep = 0, goodCost = 0 }
+          byName[name] = z
+          list[#list + 1] = z
+        end
+        local d = WritDeal(w)
+        z.writs[#z.writs + 1] = { w = w, d = d }
+        z.tiers[w[2]] = z.tiers[w[2]] + 1
+        if d.total then
+          z.buyable, z.rep, z.cost = z.buyable + 1, z.rep + d.rep, z.cost + d.total
+          if not cutoff or d.per100 <= cutoff.per then
+            d.good = true
+            z.good, z.goodRep, z.goodCost = z.good + 1, z.goodRep + d.rep, z.goodCost + d.total
+          end
+        end
+      end
+    end
+    return list, cutoff
+  end
+
+  local function TierCounts(t)
+    local parts = {}
+    for _, tier in ipairs({ "J", "E", "A" }) do
+      if t[tier] > 0 then parts[#parts + 1] = t[tier] .. " " .. tier end
+    end
+    return table.concat(parts, ", ")
+  end
+
+  local function Per100Text(per100)
+    if not per100 then return "-" end
+    return per100 > 0 and ns.Money(per100) or "|cff40ff40profit|r"
+  end
+
+  local function ZoneRows(list, cutoff)
+    local rows = {}
+    for _, z in ipairs(list) do
+      local lines = {
+        ("%d writs (J/E/A = Journeyman, Expert, Artisan); %d priced: %d reputation for %s"):format(
+          #z.writs, z.buyable, z.rep, ns.Money(z.cost)),
+        cutoff and ("%d good buys (cheaper per reputation than a Sealed %s's Writ)"):format(z.good, TIER_NAMES[cutoff.tier]) or nil,
+      }
+      for _, e in ipairs(z.writs) do
+        local w, d = e.w, e.d
+        lines[#lines + 1] = ("%s%s|r (%s %s) to %s: %s"):format(d.good and "|cff40ff40" or "|cffffffff",
+          select(2, UI.ItemName(w[3])), TIER_NAMES[w[2]], w[1], w[7] ~= "" and w[7] or "?",
+          d.per100 and (Per100Text(d.per100) .. " per 100 rep") or (d.writ and "item not priced" or "writ not on the AH / not scanned"))
+      end
+      local per100 = z.rep > 0 and z.cost / z.rep * 100 or nil
+      rows[#rows + 1] = {
+        zone = z.name, tooltipTitle = z.name, tooltipLines = lines, selected = state.zone == z.name,
+        sort = { name = z.name, continent = CONTINENTS[z.continent] or "~", writs = #z.writs, buyable = z.buyable,
+                 rep = z.rep, cost = z.buyable > 0 and z.cost or 1e12, per100 = per100 or 1e12, good = z.good },
+        cells = {
+          z.continent and z.name or ("|cffaaaaaa" .. z.name .. "|r"),
+          CONTINENTS[z.continent] or "-",
+          TierCounts(z.tiers),
+          z.buyable .. "/" .. #z.writs,
+          z.rep > 0 and z.rep or "-",
+          z.buyable > 0 and ns.Money(z.cost) or "-",
+          Per100Text(per100),
+          cutoff and (z.good > 0 and ("|cff40ff40" .. z.good .. "|r") or "0") or "-",
+        },
+      }
+    end
+    return rows
+  end
+
+  local function ZoneWritRows(z, cutoff)
+    local rows = {}
+    for _, e in ipairs(z and z.writs or {}) do
+      local w, d = e.w, e.d
+      local known = KnowsRecipeFor(w[3])
+      local itemName = select(2, UI.ItemName(w[3]))
+      rows[#rows + 1] = {
+        id = w[3], scanIds = { w[8], w[3] }, icon = UI.GetItemIcon(w[3]),
+        tooltipLines = {
+          ("Craftsman's Writ (%s, %d reputation)"):format(TIER_NAMES[w[2]], d.rep),
+          CustomerLine(w),
+          d.writState == "ah" and ("The writ costs %s on the auction house"):format(ns.Money(d.writ))
+            or d.writState == "unknown" and "The writ isn't on the auction house, or not scanned yet"
+            or "Writ price not counted (setting off)",
+          "Cheapest way to the item: " .. Via(d.node),
+          cutoff and d.total and ((d.good and "|cff40ff40A good buy:|r " or "|cffff6060Not worth buying:|r ")
+            .. ("a Sealed %s's Writ costs %s per 100 rep"):format(TIER_NAMES[cutoff.tier], ns.Money(cutoff.per))) or nil,
+          "Right-click: scan the writ and the item",
+        },
+        sort = {
+          name = itemName, prof = w[1], tier = ({ J = 1, E = 2, A = 3 })[w[2]], npc = w[7] ~= "" and w[7] or "~",
+          writ = d.writ or 1e12, cost = d.item or 1e12, per100 = d.per100 or 1e12, known = known and 0 or 1,
+        },
+        cells = {
+          (d.good and "|cff40ff40" or "") .. (w[5] > 1 and (w[5] .. " x ") or "") .. itemName .. (d.good and "|r" or ""),
+          w[1], TIER_NAMES[w[2]],
+          w[7] ~= "" and (w[7]:gsub(" %(.-%)$", "") .. (w[9] and " |cffaaaaaa(?)|r" or "")) or "|cffaaaaaa?|r",
+          d.writState == "ah" and ns.Money(d.writ) or d.writState == "unknown" and "|cffaaaaaa?|r" or "-",
+          d.item and ns.Money(d.item) or "?",
+          Per100Text(d.per100),
+          known and "|cff40ff40yes|r" or "|cffaaaaaano|r",
+        },
+      }
+    end
+    return rows
+  end
+
+  -- Which writs to buy and where to take them: the good buys, by continent, the zones
+  -- with the most reputation first; then the best single stop.
+  local function RouteText(list, cutoff)
+    local basis = cutoff and ("cheaper per reputation than a random writ from a Sealed %s's Writ (%s per 100 rep)"):format(
+        TIER_NAMES[cutoff.tier], ns.Money(cutoff.per))
+      or ns.db.settings.countTradeItems and "priced (scan the Sealed Writs to compare against them)"
+      or "priced (writ prices not counted)"
+    local lines, allRep, allCost, allCount = {}, 0, 0, 0
+    for _, cont in ipairs({ "EK", "K" }) do
+      local stops = {}
+      for _, z in ipairs(list) do
+        if z.continent == cont and z.good > 0 then stops[#stops + 1] = z end
+      end
+      table.sort(stops, function(a, b) return a.goodRep > b.goodRep end)
+      if #stops > 0 then
+        local parts, rep, cost = {}, 0, 0
+        for _, z in ipairs(stops) do
+          parts[#parts + 1] = ("%s (%d)"):format(z.name, z.good)
+          rep, cost = rep + z.goodRep, cost + z.goodCost
+          allCount = allCount + z.good
+        end
+        allRep, allCost = allRep + rep, allCost + cost
+        lines[#lines + 1] = ("|cffffd100%s:|r %s = %d rep for %s, %s per 100"):format(CONTINENTS[cont],
+          table.concat(parts, ", "), rep, ns.Money(cost), Per100Text(cost / rep * 100))
+      end
+    end
+    if allCount == 0 then
+      return "|cffaaaaaaNo writ worth buying is priced yet. The writs are on the scan list: scan the auction house "
+        .. "(with the Sealed Writs) to get a route.|r"
+    end
+    local best
+    for _, z in ipairs(list) do
+      if z.continent and z.good > 0 and (not best or z.goodRep > best.goodRep
+          or z.goodRep == best.goodRep and z.goodCost < best.goodCost) then best = z end
+    end
+    table.insert(lines, 1, ("|cffffd100Best turn-ins:|r buy the %d writs %s: %d rep for %s (once each per day). "
+      .. "Best single stop: %s, %d writs for %d rep."):format(allCount, basis, allRep, ns.Money(allCost),
+      best.name, best.good, best.goodRep))
+    return table.concat(lines, "\n")
   end
 
   -- Cheapest way to reach the Favor goal, mixing crate kinds: add one crate at
@@ -634,7 +892,11 @@ function ns.UI.BuildTradePane(parent)
     local c = data.companies[faction]
     company:SetText(c and ("|cffffd100%s|r  -  %s; crates to %s"):format(c.name, c.hub, c.crates)
       or "|cffaaaaaaTrade companies are for Alliance and Horde characters.|r")
-    local isCrates = state.mode == "crates"
+    local isCrates, isZones = state.mode == "crates", state.mode == "zones"
+    local isWrits = state.mode == "writs"
+    zones:SetShown(isZones)
+    zoneWrits:SetShown(isZones)
+    routeText:SetShown(isZones)
     crates:SetShown(isCrates)
     planText:SetShown(isCrates)
     for _, w in ipairs(goalWidgets) do w:SetShown(isCrates) end
@@ -642,17 +904,46 @@ function ns.UI.BuildTradePane(parent)
       if not goalBox:HasFocus() then goalBox:SetText(ns.db.settings.favorGoal or 0) end
       planText:SetText(PlanText())
     end
-    writs:SetShown(not isCrates)
-    tierSummary:SetShown(not isCrates)
-    for _, w in ipairs(repWidgets) do w:SetShown(not isCrates) end
-    if not isCrates and not repBox:HasFocus() then repBox:SetText(ns.db.settings.repGoal or 0) end
-    if not isCrates then tierSummary:SetText(TierSummary()) end
+    writs:SetShown(isWrits)
+    tierSummary:SetShown(isWrits)
+    for _, w in ipairs(repWidgets) do w:SetShown(isWrits) end
+    if isWrits and not repBox:HasFocus() then repBox:SetText(ns.db.settings.repGoal or 0) end
+    if isWrits then tierSummary:SetText(TierSummary()) end
     profBtn:SetShown(not isCrates)
     craftable:SetShown(not isCrates)
     craftableLabel:SetShown(not isCrates)
-    if isCrates then cratesBtn:LockHighlight() writsBtn:UnlockHighlight()
-    else writsBtn:LockHighlight() cratesBtn:UnlockHighlight() end
+    for btn, mode in pairs({ [cratesBtn] = "crates", [writsBtn] = "writs", [zonesBtn] = "zones" }) do
+      if state.mode == mode then btn:LockHighlight() else btn:UnlockHighlight() end
+    end
     profBtn:SetText(professions[state.prof + 1])
+
+    if isZones then
+      wipe(shownItems)
+      local list, cutoff = ZoneData()
+      local rows = ZoneRows(list, cutoff)
+      local s = state.sort.zones
+      UI.SortRows(rows, s[1], s[2])
+      local selected
+      for _, z in ipairs(list) do if z.name == state.zone then selected = z end end
+      if not selected and rows[1] then -- nothing picked yet (or filtered out): the top zone
+        state.zone = rows[1].zone
+        for _, row in ipairs(rows) do row.selected = row.zone == state.zone end
+        for _, z in ipairs(list) do if z.name == state.zone then selected = z end end
+      end
+      for _, z in ipairs(list) do
+        for _, e in ipairs(z.writs) do
+          shownItems[#shownItems + 1] = e.w[8]
+          shownItems[#shownItems + 1] = e.w[3]
+        end
+      end
+      zones:SetData(rows)
+      local writRows = ZoneWritRows(selected, cutoff)
+      s = state.sort.zoneWrits
+      UI.SortRows(writRows, s[1], s[2])
+      zoneWrits:SetData(writRows)
+      routeText:SetText(RouteText(list, cutoff))
+      return
+    end
 
     local list, rows = isCrates and crates or writs, isCrates and CrateRows() or WritRows()
     local s = state.sort[state.mode]

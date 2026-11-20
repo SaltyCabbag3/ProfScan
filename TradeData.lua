@@ -47,157 +47,172 @@ ns.TRADE = {
     { 248712, "Artisan Ingots", 35, false, { { 11371, 2 }, { 6037, 10 }, { 12359, 20 } } },
     { 248713, "Artisan Parts", 35, false, { { 15994, 5 }, { 18631, 5 }, { 16000, 2 } } },
   },
-  -- { profession, tier J/E/A, itemID, required skill, quantity, deliver to ("" = not known) }
+  -- Where each writ is handed in, from Wowhead's writ guide (guide=35185, 15 Nov 2026), with
+  -- customers it lacks filled in from conquestcapped.com (same date). Where the two disagree
+  -- (Mana Potion, Goblin Rocket Fuel) Wowhead's is used. Coordinates only where a guide gave them.
+  -- Writ item IDs checked against the game's item names. Unknown customers fill in as guides do.
+  -- Continent of each turn-in zone, for grouping trips.
+  zoneContinent = {
+    ["Alterac Mountains"] = "EK", ["Arathi Highlands"] = "EK", ["Badlands"] = "EK", ["Blasted Lands"] = "EK",
+    ["Burning Steppes"] = "EK", ["Deadwind Pass"] = "EK", ["Duskwood"] = "EK", ["Eastern Plaguelands"] = "EK",
+    ["Hillsbrad Foothills"] = "EK", ["Riverglades"] = "EK", ["Searing Gorge"] = "EK", ["Stranglethorn Vale"] = "EK",
+    ["Swamp of Sorrows"] = "EK", ["The Hinterlands"] = "EK", ["Western Plaguelands"] = "EK", ["Wetlands"] = "EK",
+    ["Ashenvale"] = "K", ["Azshara"] = "K", ["Desolace"] = "K", ["Dustwallow Marsh"] = "K", ["Felwood"] = "K",
+    ["Feralas"] = "K", ["Moonglade"] = "K", ["Silithus"] = "K", ["Stonetalon Mountains"] = "K", ["Tanaris"] = "K",
+    ["Thousand Needles"] = "K", ["Un'Goro Crater"] = "K", ["Winterspring"] = "K",
+  },
+  -- { profession, tier J/E/A, itemID, required skill, quantity, turn-in zone ("" = not known),
+  --   customer ("" = not known), writ item ID, true = from one guide's summary only (unconfirmed) }
   writs = {
-    { "Alchemy", "J", 3383, 120, 1, "Muggol Breezebeard, Arathi Highlands" }, -- Elixir of Wisdom
-    { "Alchemy", "J", 5996, 120, 1, "" }, -- Draught of Water Breathing
-    { "Alchemy", "J", 3385, 145, 1, "Ash'alari, Ashenvale" }, -- Lesser Mana Potion
-    { "Alchemy", "J", 3388, 150, 1, "Short John Mithril, Stranglethorn Vale" }, -- Lesser Troll's Blood Elixir
-    { "Alchemy", "J", 6048, 160, 1, "Kzixx, Duskwood" }, -- Shadow Protection Potion
-    { "Alchemy", "J", 3390, 165, 1, "Ziz Fizziks, Stonetalon Mountains" }, -- Elixir of Lesser Agility
-    { "Alchemy", "J", 3391, 175, 1, "Sos'mol, Alterac Mountains" }, -- Elixir of Ogre Strength
-    { "Alchemy", "J", 5634, 175, 1, "Webbed Mudsnout Gnoll, Hillsbrad Foothills" }, -- Free Action Potion
-    { "Alchemy", "J", 8951, 215, 1, "" }, -- Elixir of Defense
-    { "Alchemy", "E", 3827, 180, 1, "" }, -- Mana Potion
-    { "Alchemy", "E", 3823, 185, 1, "" }, -- Lesser Invisibility Potion
-    { "Alchemy", "E", 3824, 190, 1, "" }, -- Shadow Oil
-    { "Alchemy", "E", 5633, 195, 1, "" }, -- Great Rage Potion
-    { "Alchemy", "E", 6050, 205, 1, "" }, -- Frost Protection Potion
-    { "Alchemy", "E", 8949, 205, 1, "" }, -- Elixir of Agility
-    { "Alchemy", "E", 6052, 210, 1, "" }, -- Nature Protection Potion
-    { "Alchemy", "E", 6049, 210, 1, "" }, -- Fire Protection Potion
-    { "Alchemy", "E", 10592, 220, 1, "" }, -- Catseye Draught
-    { "Alchemy", "E", 9061, 225, 1, "" }, -- Goblin Rocket Fuel
-    { "Alchemy", "E", 9144, 225, 1, "" }, -- Wildvine Potion
-    { "Alchemy", "E", 4623, 230, 1, "" }, -- Lesser Stoneshield Potion
-    { "Alchemy", "A", 12190, 245, 1, "" }, -- Dreamless Sleep Potion
-    { "Alchemy", "A", 9088, 255, 1, "" }, -- Gift of Arthas
-    { "Alchemy", "A", 246948, 260, 1, "" }, -- Distilled Firewater
-    { "Alchemy", "A", 9224, 265, 1, "" }, -- Potion of Demon Slaying
-    { "Alchemy", "A", 9233, 265, 1, "" }, -- Draught of Detect Demon
-    { "Alchemy", "A", 3387, 275, 1, "" }, -- Limited Invulnerability Potion
-    { "Alchemy", "A", 13457, 305, 1, "" }, -- Greater Fire Protection Potion
-    { "Alchemy", "A", 18253, 310, 1, "" }, -- Major Rejuvenation Potion
-    { "Alchemy", "A", 13513, 315, 1, "" }, -- Flask of Chromatic Resistance
-    { "Blacksmithing", "J", 15869, 75, 1, "" }, -- Silver Skeleton Key
-    { "Blacksmithing", "J", 3848, 110, 1, "Plucky Johnson, Thousand Needles" }, -- Big Bronze Knife
-    { "Blacksmithing", "J", 5540, 115, 1, "" }, -- Pearl-handled Dagger
-    { "Blacksmithing", "J", 2865, 120, 1, "" }, -- Rough Bronze Leggings
-    { "Blacksmithing", "J", 11128, 130, 1, "Muggol Breezebeard, Arathi Highlands" }, -- Golden Rod
-    { "Blacksmithing", "J", 3491, 135, 1, "Hillsbrad Foothills" }, -- Heavy Bronze Mace
-    { "Blacksmithing", "J", 5541, 145, 1, "" }, -- Iridescent Hammer
-    { "Blacksmithing", "J", 3484, 150, 1, "" }, -- Green Iron Boots
-    { "Blacksmithing", "J", 3485, 155, 1, "" }, -- Green Iron Gauntlets
-    { "Blacksmithing", "E", 7964, 175, 1, "" }, -- Solid Sharpening Stone
-    { "Blacksmithing", "E", 3853, 180, 1, "" }, -- Moonsteel Broadsword
-    { "Blacksmithing", "E", 11144, 180, 1, "" }, -- Truesilver Rod
-    { "Blacksmithing", "E", 6041, 190, 1, "" }, -- Steel Weapon Chain
-    { "Blacksmithing", "E", 3837, 190, 1, "" }, -- Golden Scale Coif
-    { "Blacksmithing", "E", 9060, 200, 1, "" }, -- Inlaid Mithril Cylinder
-    { "Blacksmithing", "E", 9366, 200, 1, "" }, -- Golden Scale Gauntlets
-    { "Blacksmithing", "E", 7922, 210, 1, "" }, -- Steel Plate Helm
-    { "Blacksmithing", "E", 7941, 210, 1, "" }, -- Heavy Mithril Axe
-    { "Blacksmithing", "E", 7928, 220, 1, "" }, -- Ornate Mithril Shoulders
-    { "Blacksmithing", "E", 7942, 220, 1, "" }, -- Blue Glittering Axe
-    { "Blacksmithing", "E", 7943, 225, 1, "" }, -- Wicked Mithril Blade
-    { "Blacksmithing", "A", 7929, 225, 1, "" }, -- Orcish War Leggings
-    { "Blacksmithing", "A", 7969, 230, 1, "" }, -- Mithril Spurs
-    { "Blacksmithing", "A", 15872, 250, 1, "" }, -- Arcanite Skeleton Key
-    { "Blacksmithing", "A", 12416, 255, 1, "" }, -- Radiant Belt
-    { "Blacksmithing", "A", 7947, 255, 1, "" }, -- Ebon Shiv
-    { "Blacksmithing", "A", 12775, 280, 1, "" }, -- Huge Thorium Battleaxe
-    { "Blacksmithing", "A", 12417, 290, 1, "" }, -- Radiant Circlet
-    { "Blacksmithing", "A", 12422, 295, 1, "" }, -- Imperial Plate Chest
-    { "Blacksmithing", "A", 20549, 320, 1, "" }, -- Darkrune Gauntlets
-    { "Engineering", "J", 6712, 115, 1, "Gorgrash, Hillsbrad Foothills" }, -- Practice Lock
-    { "Engineering", "J", 8069, 125, 200, "Kixxie, Wetlands" }, -- Crafted Solid Shot
-    { "Engineering", "J", 4380, 140, 1, "" }, -- Big Bronze Bomb
-    { "Engineering", "J", 4373, 145, 1, "" }, -- Shadow Goggles
-    { "Engineering", "J", 7506, 150, 1, "Scooty, Stranglethorn Vale" }, -- Gnomish Universal Remote
-    { "Engineering", "J", 5507, 160, 1, "Alan Sneeks, Alterac Mountains" }, -- Ornate Spyglass
-    { "Engineering", "J", 4381, 165, 1, "" }, -- Minor Recombobulator
-    { "Engineering", "J", 4383, 170, 1, "" }, -- Moonsight Rifle
-    { "Engineering", "J", 4384, 175, 1, "Arathi Highlands" }, -- Explosive Sheep
-    { "Engineering", "E", 10498, 175, 1, "" }, -- Gyromatic Micro-Adjustor
-    { "Engineering", "E", 4392, 185, 1, "" }, -- Advanced Target Dummy
-    { "Engineering", "E", 4852, 185, 1, "" }, -- Flash Bomb
-    { "Engineering", "E", 10560, 200, 1, "" }, -- Unstable Trigger
-    { "Engineering", "E", 11590, 200, 1, "" }, -- Mechanical Repair Kit
-    { "Engineering", "E", 4393, 205, 1, "" }, -- Craftsman's Monocle
-    { "Engineering", "E", 4395, 215, 1, "" }, -- Goblin Land Mine
-    { "Engineering", "E", 10514, 215, 1, "" }, -- Mithril Frag Bomb
-    { "Engineering", "E", 4396, 220, 1, "" }, -- Mechanical Dragonling
-    { "Engineering", "E", 10500, 225, 1, "" }, -- Fire Goggles
-    { "Engineering", "E", 10501, 240, 1, "" }, -- Catseye Ultra Goggles
-    { "Engineering", "E", 16005, 305, 1, "" }, -- Dark Iron Bomb
-    { "Engineering", "A", 10548, 260, 1, "" }, -- Sniper Scope
-    { "Engineering", "A", 10504, 265, 1, "" }, -- Green Lens
-    { "Engineering", "A", 18631, 270, 1, "" }, -- Truesilver Transformer
-    { "Engineering", "A", 18645, 275, 1, "" }, -- Gnomish Alarm-O-Bot
-    { "Engineering", "A", 15996, 285, 1, "" }, -- Lifelike Mechanical Toad
-    { "Engineering", "A", 18587, 285, 1, "" }, -- Goblin Jumper Cables XL
-    { "Engineering", "A", 16023, 295, 1, "" }, -- Masterwork Target Dummy
-    { "Engineering", "A", 18232, 320, 1, "" }, -- Field Repair Bot 74A
-    { "Engineering", "A", 21277, 320, 1, "" }, -- Tranquil Mechanical Yeti
-    { "Leatherworking", "J", 2317, 100, 1, "Kzixx, Duskwood" }, -- Dark Leather Tunic
-    { "Leatherworking", "J", 5958, 105, 1, "" }, -- Fine Leather Pants
-    { "Leatherworking", "J", 7284, 120, 1, "" }, -- Red Whelp Gloves
-    { "Leatherworking", "J", 18662, 125, 1, "" }, -- Heavy Leather Ball
-    { "Leatherworking", "J", 7349, 135, 1, "" }, -- Herbalist's Gloves
-    { "Leatherworking", "J", 7358, 140, 1, "" }, -- Pilferer's Gloves
-    { "Leatherworking", "J", 4252, 140, 1, "" }, -- Dark Leather Shoulders
-    { "Leatherworking", "J", 7371, 145, 1, "" }, -- Heavy Quiver
-    { "Leatherworking", "J", 4254, 150, 1, "" }, -- Barbaric Gloves
-    { "Leatherworking", "E", 5965, 180, 1, "" }, -- Guardian Cloak
-    { "Leatherworking", "E", 7378, 180, 1, "" }, -- Dusky Bracers
-    { "Leatherworking", "E", 8174, 195, 1, "" }, -- Comfortable Leather Hat
-    { "Leatherworking", "E", 7391, 195, 1, "" }, -- Swift Boots
-    { "Leatherworking", "E", 8192, 205, 1, "" }, -- Nightscape Shoulders
-    { "Leatherworking", "E", 8189, 205, 1, "" }, -- Turtle Scale Breastplate
-    { "Leatherworking", "E", 8200, 210, 1, "" }, -- Big Voodoo Robe
-    { "Leatherworking", "E", 8210, 215, 1, "" }, -- Wild Leather Shoulders
-    { "Leatherworking", "E", 8201, 215, 1, "" }, -- Big Voodoo Mask
-    { "Leatherworking", "E", 8214, 220, 1, "" }, -- Wild Leather Helmet
-    { "Leatherworking", "E", 8217, 220, 1, "" }, -- Quickdraw Quiver
-    { "Leatherworking", "E", 8218, 220, 1, "" }, -- Thick Leather Ammo Pouch
-    { "Leatherworking", "A", 15084, 260, 1, "" }, -- Wicked Leather Bracers
-    { "Leatherworking", "A", 15092, 270, 1, "" }, -- Runic Leather Bracers
-    { "Leatherworking", "A", 15071, 270, 1, "" }, -- Frostsaber Boots
-    { "Leatherworking", "A", 15053, 280, 1, "" }, -- Volcanic Breastplate
-    { "Leatherworking", "A", 15087, 285, 1, "" }, -- Wicked Leather Pants
-    { "Leatherworking", "A", 18258, 285, 1, "" }, -- Gordok Ogre Suit
-    { "Leatherworking", "A", 15094, 285, 1, "" }, -- Runic Leather Headband
-    { "Leatherworking", "A", 15075, 285, 1, "" }, -- Chimeric Vest
-    { "Leatherworking", "A", 15080, 290, 1, "" }, -- Heavy Scorpid Helm
-    { "Tailoring", "J", 4313, 80, 1, "" }, -- Red Woolen Boots
-    { "Tailoring", "J", 10048, 95, 1, "" }, -- Colorful Kilt
-    { "Tailoring", "J", 6263, 100, 1, "Alyce, Arathi Highlands" }, -- Blue Overalls
-    { "Tailoring", "J", 6264, 115, 1, "" }, -- Greater Adept's Robe
-    { "Tailoring", "J", 4317, 125, 1, "" }, -- Phoenix Pants
-    { "Tailoring", "J", 5766, 130, 1, "" }, -- Lesser Wizard's Robe
-    { "Tailoring", "J", 7048, 130, 1, "Cowardly Peon, Ashenvale" }, -- Azure Silk Hood
-    { "Tailoring", "J", 4321, 135, 1, "" }, -- Spider Silk Slippers
-    { "Tailoring", "J", 4245, 145, 1, "" }, -- Small Silk Pack
-    { "Tailoring", "E", 7061, 180, 1, "" }, -- Earthen Silk Belt
-    { "Tailoring", "E", 7063, 185, 1, "" }, -- Crimson Silk Robe
-    { "Tailoring", "E", 4329, 185, 1, "" }, -- Star Belt
-    { "Tailoring", "E", 9998, 185, 1, "" }, -- Black Mageweave Vest
-    { "Tailoring", "E", 10008, 185, 1, "" }, -- White Bandit Mask
-    { "Tailoring", "E", 10052, 190, 1, "" }, -- Orange Martial Shirt
-    { "Tailoring", "E", 10004, 195, 1, "" }, -- Shadoweave Robe
-    { "Tailoring", "E", 10009, 195, 1, "" }, -- Red Mageweave Pants
-    { "Tailoring", "E", 10050, 205, 1, "" }, -- Mageweave Bag
-    { "Tailoring", "E", 10023, 205, 1, "" }, -- Shadoweave Gloves
-    { "Tailoring", "E", 22246, 205, 1, "" }, -- Enchanted Mageweave Pouch
-    { "Tailoring", "E", 10042, 205, 1, "" }, -- Cindercloth Robe
-    { "Tailoring", "A", 10036, 155, 1, "" }, -- Tuxedo Jacket
-    { "Tailoring", "A", 10025, 215, 1, "" }, -- Shadoweave Mask
-    { "Tailoring", "A", 14046, 230, 1, "" }, -- Runecloth Bag
-    { "Tailoring", "A", 21340, 230, 1, "" }, -- Soul Pouch
-    { "Tailoring", "A", 14141, 240, 1, "" }, -- Ghostweave Vest
-    { "Tailoring", "A", 22251, 245, 1, "" }, -- Cenarion Herb Bag
-    { "Tailoring", "A", 13864, 250, 1, "" }, -- Runecloth Boots
-    { "Tailoring", "A", 14108, 255, 1, "" }, -- Felcloth Boots
-    { "Tailoring", "A", 14130, 275, 1, "" }, -- Wizardweave Turban
+    { "Alchemy", "J", 3383, 120, 1, "Arathi Highlands", "Muggol Breezebeard (48.8, 55.8)", 264012 }, -- Elixir of Wisdom
+    { "Alchemy", "J", 5996, 120, 1, "Wetlands", "Kixxle (50.2, 37.8)", 264019 }, -- Draught of Water Breathing
+    { "Alchemy", "J", 3385, 145, 1, "Ashenvale", "Ash'alari (60.2, 72.6)", 264013 }, -- Lesser Mana Potion
+    { "Alchemy", "J", 3388, 150, 1, "Stranglethorn Vale", "Short John Mithril (29.6, 47.4)", 264017 }, -- Lesser Troll's Blood Elixir
+    { "Alchemy", "J", 6048, 160, 1, "Duskwood", "Kzixx (81.8, 19.8)", 264014 }, -- Shadow Protection Potion
+    { "Alchemy", "J", 3390, 165, 1, "Stonetalon Mountains", "Ziz Fizziks (59.0, 62.4)", 264016 }, -- Elixir of Lesser Agility
+    { "Alchemy", "J", 3391, 175, 1, "Alterac Mountains", "Sos'mol (38.4, 61.2)", 264011 }, -- Elixir of Ogre Strength
+    { "Alchemy", "J", 5634, 175, 1, "Hillsbrad Foothills", "Webbed Mudsnout Gnoll (62.2, 69.2)", 264015 }, -- Free Action Potion
+    { "Alchemy", "J", 8951, 215, 1, "Thousand Needles", "Rizzle Brassbolts", 264018 }, -- Elixir of Defense
+    { "Alchemy", "E", 3827, 180, 1, "Ashenvale", "Ash'alari (60.2, 72.6)", 264062 }, -- Mana Potion
+    { "Alchemy", "E", 3823, 185, 1, "Desolace", "Centaur Pariah", 264057 }, -- Lesser Invisibility Potion
+    { "Alchemy", "E", 3824, 190, 1, "Swamp of Sorrows", "Mukomonji", 264064 }, -- Shadow Oil
+    { "Alchemy", "E", 5633, 195, 1, "Moonglade", "Dendrite Starblaze", 264061 }, -- Great Rage Potion
+    { "Alchemy", "E", 6050, 205, 1, "Badlands", "Lotwil Veriatus", 264056 }, -- Frost Protection Potion
+    { "Alchemy", "E", 8949, 205, 1, "The Hinterlands", "Juo", 264066 }, -- Elixir of Agility
+    { "Alchemy", "E", 6052, 210, 1, "Felwood", "Greta Mosshoof", 264059 }, -- Nature Protection Potion
+    { "Alchemy", "E", 6049, 210, 1, "Searing Gorge", "Durganon", 264063 }, -- Fire Protection Potion
+    { "Alchemy", "E", 10592, 220, 1, "Feralas", "Scout Raroul", 264060 }, -- Catseye Draught
+    { "Alchemy", "E", 9061, 225, 1, "Azshara", "Duke Hydraxis", 264065 }, -- Goblin Rocket Fuel
+    { "Alchemy", "E", 9144, 225, 1, "Un'Goro Crater", "Spark Nilminer", 264067 }, -- Wildvine Potion
+    { "Alchemy", "E", 4623, 230, 1, "Dustwallow Marsh", "Mudcrush Durtfeet", 264058 }, -- Lesser Stoneshield Potion
+    { "Alchemy", "A", 12190, 245, 1, "Blasted Lands", "Kum'isha the Collector", 264117 }, -- Dreamless Sleep Potion
+    { "Alchemy", "A", 9088, 255, 1, "Eastern Plaguelands", "Adon", 264120 }, -- Gift of Arthas
+    { "Alchemy", "A", 246948, 260, 1, "Winterspring", "Bor'dorc", 264124 }, -- Distilled Firewater
+    { "Alchemy", "A", 9224, 265, 1, "Azshara", "Archmage Xylem", 264116, true }, -- Potion of Demon Slaying
+    { "Alchemy", "A", 9233, 265, 1, "Deadwind Pass", "Hastings", 264119 }, -- Draught of Detect Demon
+    { "Alchemy", "A", 3387, 275, 1, "", "", 264122 }, -- Limited Invulnerability Potion
+    { "Alchemy", "A", 13457, 305, 1, "", "", 264118 }, -- Greater Fire Protection Potion
+    { "Alchemy", "A", 18253, 310, 1, "", "", 264123 }, -- Major Rejuvenation Potion
+    { "Alchemy", "A", 13513, 315, 1, "", "", 264121 }, -- Flask of Chromatic Resistance
+    { "Blacksmithing", "J", 15869, 75, 1, "Duskwood", "Battered Trunk", 264023 }, -- Silver Skeleton Key
+    { "Blacksmithing", "J", 3848, 110, 1, "Thousand Needles", "\"Plucky\" Johnson (79.6, 75.6)", 264027 }, -- Big Bronze Knife
+    { "Blacksmithing", "J", 5540, 115, 1, "Alterac Mountains", "Alan Sneeks (30.6, 61.0)", 264020 }, -- Pearl-handled Dagger
+    { "Blacksmithing", "J", 2865, 120, 1, "Stonetalon Mountains", "Ziz Fizziks (59.0, 62.4)", 264025 }, -- Rough Bronze Leggings
+    { "Blacksmithing", "J", 11128, 130, 1, "Arathi Highlands", "Muggol Breezebeard (48.8, 55.8)", 264021 }, -- Golden Rod
+    { "Blacksmithing", "J", 3491, 135, 1, "Hillsbrad Foothills", "Gorgrash (80.0, 48.2)", 264024 }, -- Heavy Bronze Mace
+    { "Blacksmithing", "J", 5541, 145, 1, "Ashenvale", "Cowardly Peon (78.4, 68.8)", 264022 }, -- Iridescent Hammer
+    { "Blacksmithing", "J", 3484, 150, 1, "Wetlands", "Kixxle (50.2, 37.8)", 264028 }, -- Green Iron Boots
+    { "Blacksmithing", "J", 3485, 155, 1, "Stranglethorn Vale", "\"Sea Wolf\" MacKinley", 264026 }, -- Green Iron Gauntlets
+    { "Blacksmithing", "E", 7964, 175, 1, "Searing Gorge", "Master Smith Burninate", 264075 }, -- Solid Sharpening Stone
+    { "Blacksmithing", "E", 3853, 180, 1, "Moonglade", "Meliri", 264073 }, -- Moonsteel Broadsword
+    { "Blacksmithing", "E", 11144, 180, 1, "Tanaris", "Spigot Operator Luglunket", 264077 }, -- Truesilver Rod
+    { "Blacksmithing", "E", 6041, 190, 1, "Dustwallow Marsh", "Ugbert", 264070 }, -- Steel Weapon Chain
+    { "Blacksmithing", "E", 3837, 190, 1, "Riverglades", "Spek", 264074 }, -- Golden Scale Coif
+    { "Blacksmithing", "E", 9060, 200, 1, "Desolace", "Bibbly F'utzbuckle", 264069 }, -- Inlaid Mithril Cylinder
+    { "Blacksmithing", "E", 9366, 200, 1, "", "", 264078 }, -- Golden Scale Gauntlets
+    { "Blacksmithing", "E", 7922, 210, 1, "Badlands", "Furious Shadowforge Digger", 264068 }, -- Steel Plate Helm
+    { "Blacksmithing", "E", 7941, 210, 1, "Un'Goro Crater", "Torwa Pathfinder", 264079 }, -- Heavy Mithril Axe
+    { "Blacksmithing", "E", 7928, 220, 1, "Felwood", "Taronn Redfeather", 264071 }, -- Ornate Mithril Shoulders
+    { "Blacksmithing", "E", 7942, 220, 1, "Feralas", "Scout Raroul", 264072 }, -- Blue Glittering Axe
+    { "Blacksmithing", "E", 7943, 225, 1, "", "", 264076 }, -- Wicked Mithril Blade
+    { "Blacksmithing", "A", 7929, 225, 1, "", "", 264127 }, -- Orcish War Leggings
+    { "Blacksmithing", "A", 7969, 230, 1, "Deadwind Pass", "", 264128 }, -- Mithril Spurs
+    { "Blacksmithing", "A", 15872, 250, 1, "", "", 264132 }, -- Arcanite Skeleton Key
+    { "Blacksmithing", "A", 12416, 255, 1, "Blasted Lands", "Kum'isha the Collector", 264126 }, -- Radiant Belt
+    { "Blacksmithing", "A", 7947, 255, 1, "", "", 264133 }, -- Ebon Shiv
+    { "Blacksmithing", "A", 12775, 280, 1, "", "", 264131 }, -- Huge Thorium Battleaxe
+    { "Blacksmithing", "A", 12417, 290, 1, "", "", 264125 }, -- Radiant Circlet
+    { "Blacksmithing", "A", 12422, 295, 1, "", "", 264129 }, -- Imperial Plate Chest
+    { "Blacksmithing", "A", 20549, 320, 1, "", "", 264130 }, -- Darkrune Gauntlets
+    { "Engineering", "J", 6712, 115, 1, "Hillsbrad Foothills", "Gorgrash (80.0, 48.2)", 264033 }, -- Practice Lock
+    { "Engineering", "J", 8069, 125, 200, "Wetlands", "Kixxle (50.2, 37.8)", 264037 }, -- Crafted Solid Shot
+    { "Engineering", "J", 4380, 140, 1, "Thousand Needles", "Razzeric", 264036 }, -- Big Bronze Bomb
+    { "Engineering", "J", 4373, 145, 1, "Stonetalon Mountains", "Ziz Fizziks (59.0, 62.4)", 264034 }, -- Shadow Goggles
+    { "Engineering", "J", 7506, 150, 1, "Stranglethorn Vale", "Scooty (27.6, 77.4)", 264035 }, -- Gnomish Universal Remote
+    { "Engineering", "J", 5507, 160, 1, "Alterac Mountains", "Alan Sneeks (30.6, 61.0)", 264029 }, -- Ornate Spyglass
+    { "Engineering", "J", 4381, 165, 1, "Duskwood", "Kzixx (81.8, 19.8)", 264032 }, -- Minor Recombobulator
+    { "Engineering", "J", 4383, 170, 1, "Ashenvale", "Grembly", 264031 }, -- Moonsight Rifle
+    { "Engineering", "J", 4384, 175, 1, "Arathi Highlands", "Alyce (34.0, 23.2)", 264030 }, -- Explosive Sheep
+    { "Engineering", "E", 10498, 175, 1, "Tanaris", "Jhordy Lapforge", 264089 }, -- Gyromatic Micro-Adjustor
+    { "Engineering", "E", 4392, 185, 1, "Desolace", "Bibbly F'utzbuckle", 264081 }, -- Advanced Target Dummy
+    { "Engineering", "E", 4852, 185, 1, "Riverglades", "Spek", 264086 }, -- Flash Bomb
+    { "Engineering", "E", 10560, 200, 1, "Moonglade", "Narianna", 264085 }, -- Unstable Trigger
+    { "Engineering", "E", 11590, 200, 1, "The Hinterlands", "Rhapsody Shindigger", 264090 }, -- Mechanical Repair Kit
+    { "Engineering", "E", 4393, 205, 1, "Dustwallow Marsh", "The Ravenous", 264082 }, -- Craftsman's Monocle
+    { "Engineering", "E", 4395, 215, 1, "Felwood", "Jessir Moonbow", 264083 }, -- Goblin Land Mine
+    { "Engineering", "E", 10514, 215, 1, "Swamp of Sorrows", "Bullets Bigblast", 264088 }, -- Mithril Frag Bomb
+    { "Engineering", "E", 4396, 220, 1, "Badlands", "", 264080, true }, -- Mechanical Dragonling
+    { "Engineering", "E", 10500, 225, 1, "Searing Gorge", "Durganon", 264087 }, -- Fire Goggles
+    { "Engineering", "E", 10501, 240, 1, "Feralas", "Scout Raroul", 264084 }, -- Catseye Ultra Goggles
+    { "Engineering", "E", 16005, 305, 1, "", "", 264091 }, -- Dark Iron Bomb
+    { "Engineering", "A", 10548, 260, 1, "", "", 264141 }, -- Sniper Scope
+    { "Engineering", "A", 10504, 265, 1, "", "", 264135 }, -- Green Lens
+    { "Engineering", "A", 18631, 270, 1, "Silithus", "Khur Hornstriker", 264140, true }, -- Truesilver Transformer
+    { "Engineering", "A", 18645, 275, 1, "", "", 264137 }, -- Gnomish Alarm-O-Bot
+    { "Engineering", "A", 15996, 285, 1, "", "", 264136 }, -- Lifelike Mechanical Toad
+    { "Engineering", "A", 18587, 285, 1, "", "", 264138 }, -- Goblin Jumper Cables XL
+    { "Engineering", "A", 16023, 295, 1, "", "", 264134 }, -- Masterwork Target Dummy
+    { "Engineering", "A", 18232, 320, 1, "", "", 264139 }, -- Field Repair Bot 74A
+    { "Engineering", "A", 21277, 320, 1, "", "", 264142 }, -- Tranquil Mechanical Yeti
+    { "Leatherworking", "J", 2317, 100, 1, "Duskwood", "Kzixx (81.8, 19.8)", 264041 }, -- Dark Leather Tunic
+    { "Leatherworking", "J", 5958, 105, 1, "Arathi Highlands", "Alyce (34.0, 23.2)", 264039 }, -- Fine Leather Pants
+    { "Leatherworking", "J", 7284, 120, 1, "Wetlands", "Kixxle (50.2, 37.8)", 264046 }, -- Red Whelp Gloves
+    { "Leatherworking", "J", 18662, 125, 1, "Alterac Mountains", "Sos'mol (38.4, 61.2)", 264038 }, -- Heavy Leather Ball
+    { "Leatherworking", "J", 7349, 135, 1, "Ashenvale", "Murache", 264040 }, -- Herbalist's Gloves
+    { "Leatherworking", "J", 7358, 140, 1, "Hillsbrad Foothills", "Kris Legace", 264042 }, -- Pilferer's Gloves
+    { "Leatherworking", "J", 4252, 140, 1, "Stranglethorn Vale", "Narkk", 264044 }, -- Dark Leather Shoulders
+    { "Leatherworking", "J", 7371, 145, 1, "Stonetalon Mountains", "Ziz Fizziks (59.0, 62.4)", 264043 }, -- Heavy Quiver
+    { "Leatherworking", "J", 4254, 150, 1, "Thousand Needles", "Goblin Pit Boss", 264045 }, -- Barbaric Gloves
+    { "Leatherworking", "E", 5965, 180, 1, "Desolace", "Azore Aldamort", 264093 }, -- Guardian Cloak
+    { "Leatherworking", "E", 7378, 180, 1, "Dustwallow Marsh", "The Ravenous", 264094 }, -- Dusky Bracers
+    { "Leatherworking", "E", 8174, 195, 1, "Badlands", "Garek", 264092 }, -- Comfortable Leather Hat
+    { "Leatherworking", "E", 7391, 195, 1, "Riverglades", "Spek", 264098 }, -- Swift Boots
+    { "Leatherworking", "E", 8192, 205, 1, "Searing Gorge", "Evonice Sootsmoker", 264099 }, -- Nightscape Shoulders
+    { "Leatherworking", "E", 8189, 205, 1, "The Hinterlands", "Juo", 264102 }, -- Turtle Scale Breastplate
+    { "Leatherworking", "E", 8200, 210, 1, "Tanaris", "Yeh'kinya", 264101 }, -- Big Voodoo Robe
+    { "Leatherworking", "E", 8210, 215, 1, "Feralas", "", 264096 }, -- Wild Leather Shoulders
+    { "Leatherworking", "E", 8201, 215, 1, "Swamp of Sorrows", "Mukomonji", 264100 }, -- Big Voodoo Mask
+    { "Leatherworking", "E", 8214, 220, 1, "Felwood", "Ivy Leafrunner", 264095 }, -- Wild Leather Helmet
+    { "Leatherworking", "E", 8217, 220, 1, "Moonglade", "Narianna", 264097 }, -- Quickdraw Quiver
+    { "Leatherworking", "E", 8218, 220, 1, "Un'Goro Crater", "Nergal", 264103 }, -- Thick Leather Ammo Pouch
+    { "Leatherworking", "A", 15084, 260, 1, "", "", 264147 }, -- Wicked Leather Bracers
+    { "Leatherworking", "A", 15092, 270, 1, "Western Plaguelands", "Fallen Adventurer", 264150, true }, -- Runic Leather Bracers
+    { "Leatherworking", "A", 15071, 270, 1, "", "", 264151 }, -- Frostsaber Boots
+    { "Leatherworking", "A", 15053, 280, 1, "", "", 264145 }, -- Volcanic Breastplate
+    { "Leatherworking", "A", 15087, 285, 1, "", "", 264143 }, -- Wicked Leather Pants
+    { "Leatherworking", "A", 18258, 285, 1, "", "", 264144 }, -- Gordok Ogre Suit
+    { "Leatherworking", "A", 15094, 285, 1, "Deadwind Pass", "Hastings", 264146 }, -- Runic Leather Headband
+    { "Leatherworking", "A", 15075, 285, 1, "", "", 264148 }, -- Chimeric Vest
+    { "Leatherworking", "A", 15080, 290, 1, "", "", 264149 }, -- Heavy Scorpid Helm
+    { "Tailoring", "J", 4313, 80, 1, "Stonetalon Mountains", "Ziz Fizziks (59.0, 62.4)", 264052 }, -- Red Woolen Boots
+    { "Tailoring", "J", 10048, 95, 1, "Stranglethorn Vale", "Hekshi", 264053 }, -- Colorful Kilt
+    { "Tailoring", "J", 6263, 100, 1, "Arathi Highlands", "Alyce (34.0, 23.2)", 264048 }, -- Blue Overalls
+    { "Tailoring", "J", 6264, 115, 1, "Thousand Needles", "Magus Tirth", 264054 }, -- Greater Adept's Robe
+    { "Tailoring", "J", 4317, 125, 1, "Alterac Mountains", "Bath'rah the Windwatcher", 264051 }, -- Phoenix Pants
+    { "Tailoring", "J", 5766, 130, 1, "Alterac Mountains", "Alan Sneeks (30.6, 61.0)", 264047 }, -- Lesser Wizard's Robe
+    { "Tailoring", "J", 7048, 130, 1, "Ashenvale", "Cowardly Peon (78.4, 68.8)", 264049 }, -- Azure Silk Hood
+    { "Tailoring", "J", 4321, 135, 1, "Wetlands", "Kixxle (50.2, 37.8)", 264055 }, -- Spider Silk Slippers
+    { "Tailoring", "J", 4245, 145, 1, "Duskwood", "Kzixx (81.8, 19.8)", 264050 }, -- Small Silk Pack
+    { "Tailoring", "E", 7061, 180, 1, "Un'Goro Crater", "Petra Grossen", 264115 }, -- Earthen Silk Belt
+    { "Tailoring", "E", 7063, 185, 1, "Dustwallow Marsh", "Tabetha", 264106 }, -- Crimson Silk Robe
+    { "Tailoring", "E", 4329, 185, 1, "Moonglade", "Mylentha Riverbend", 264109 }, -- Star Belt
+    { "Tailoring", "E", 9998, 185, 1, "Riverglades", "Spek", 264110 }, -- Black Mageweave Vest
+    { "Tailoring", "E", 10008, 185, 1, "Tanaris", "Vizzklick", 264113 }, -- White Bandit Mask
+    { "Tailoring", "E", 10052, 190, 1, "Swamp of Sorrows", "Bullets Bigblast", 264112 }, -- Orange Martial Shirt
+    { "Tailoring", "E", 10004, 195, 1, "Felwood", "Eridan Bluewind", 264107 }, -- Shadoweave Robe
+    { "Tailoring", "E", 10009, 195, 1, "Searing Gorge", "Lookout Captain Lolo Longstriker", 264111 }, -- Red Mageweave Pants
+    { "Tailoring", "E", 10050, 205, 1, "Badlands", "Rigglefuzz", 264104 }, -- Mageweave Bag
+    { "Tailoring", "E", 10023, 205, 1, "Desolace", "Willow", 264105 }, -- Shadoweave Gloves
+    { "Tailoring", "E", 22246, 205, 1, "Felwood", "", 264108 }, -- Enchanted Mageweave Pouch
+    { "Tailoring", "E", 10042, 205, 1, "The Hinterlands", "Atal'ai Exile", 264114 }, -- Cindercloth Robe
+    { "Tailoring", "A", 10036, 155, 1, "Deadwind Pass", "Hastings", 264155 }, -- Tuxedo Jacket
+    { "Tailoring", "A", 10025, 215, 1, "Silithus", "Hermit Ortell", 264158, true }, -- Shadoweave Mask
+    { "Tailoring", "A", 14046, 230, 1, "Blasted Lands", "Kum'isha the Collector", 264153 }, -- Runecloth Bag
+    { "Tailoring", "A", 21340, 230, 1, "Winterspring", "", 264160 }, -- Soul Pouch
+    { "Tailoring", "A", 14141, 240, 1, "", "", 264159 }, -- Ghostweave Vest
+    { "Tailoring", "A", 22251, 245, 1, "", "", 264157 }, -- Cenarion Herb Bag
+    { "Tailoring", "A", 13864, 250, 1, "Burning Steppes", "Gorzeeki Wildeyes", 264154, true }, -- Runecloth Boots
+    { "Tailoring", "A", 14108, 255, 1, "", "", 264156 }, -- Felcloth Boots
+    { "Tailoring", "A", 14130, 275, 1, "", "", 264152 }, -- Wizardweave Turban
   },
 }
