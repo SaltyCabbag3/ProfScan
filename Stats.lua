@@ -308,23 +308,25 @@ end
 
 -- Newest known price levels of an item: { { price, qty }, ... } cheapest first, and
 -- their time. A watched item's live order book wins when it is newer.
+-- key: another auction house than the one shown (ns.ahKey).
 local parsed = {} -- [ah .. id] = { t =, levels = } parse cache
-function ns:Ladder(id)
+function ns:Ladder(id, key)
+  key = key or self.ahKey
   local book = self.books and self.books[id]
-  local stored = self.ladders[self.ahKey] and self.ladders[self.ahKey][id]
-  if book and book.t and (not stored or book.t >= stored.t) and self:WatchKey() == self.ahKey then
+  local stored = self.ladders[key] and self.ladders[key][id]
+  if book and book.t and (not stored or book.t >= stored.t) and self:WatchKey() == key then
     local levels = {}
     for i, level in ipairs(book.levels) do levels[i] = { level.price, level.qty } end
     return levels, book.t
   end
   if not stored then return nil end
-  local key = self.ahKey .. id
-  local cache = parsed[key]
+  local cacheKey = key .. id
+  local cache = parsed[cacheKey]
   if not cache or cache.t ~= stored.t then
     local levels = {}
     for price, qty in stored.text:gmatch("(%d+):(%d+)") do levels[#levels + 1] = { tonumber(price), tonumber(qty) } end
     cache = { t = stored.t, levels = levels }
-    parsed[key] = cache
+    parsed[cacheKey] = cache
   end
   return cache.levels, cache.t
 end

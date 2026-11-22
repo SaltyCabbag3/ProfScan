@@ -7,7 +7,10 @@ local _, ns = ...
     AH button    (top right) whose prices are shown and used for recipes: auto,
                  Alliance, Horde or Goblin (ns.ahKey, see Core.lua).
     Prices       every item on the scan list: lowest price on a faction auction
-                 house and on the goblin one, the goblin one's difference, the
+                 house and on the goblin one, the goblin one's difference (in percent;
+                 in gold for one item; and Full diff: what buying every goblin listing
+                 cheaper than the faction price and selling it there would gain, from
+                 the goblin AH's price levels of its last deep scan), the
                  shown auction house's 7-day median, how
                  far the price is from it, quantity listed, sold per day
                  (measured by watch mode, or "~" = Blizzard API estimate), scan age. Click: item view. Right-click: watch or
@@ -261,6 +264,34 @@ local function DiffCell(diff)
   return "0%"
 end
 
+-- Goblin price minus the faction one, for one item: "+5s" (goblin dearer) / "-1g 20s" (cheaper).
+local function GoldDiffCell(diff)
+  if not diff then return "-" end
+  if diff == 0 then return "0" end
+  return (diff > 0 and "|cffff9955+|r" or "|cff55ccff-|r") .. ns.Money(math.abs(diff))
+end
+
+-- What buying every goblin listing cheaper than the faction price `fac` and selling it at
+-- that price would gain: sum of (fac - price) x quantity over the goblin price levels.
+-- Returns gain, units, levels known (false: no goblin price levels, only its lowest price).
+local function FullDiff(id, fac, gob, goblinKey)
+  if not (fac and gob) or gob >= fac then return nil end
+  local levels = ns:Ladder(id, goblinKey)
+  if not levels or #levels == 0 then return fac - gob, 1, false end
+  local gain, units = 0, 0
+  for _, level in ipairs(levels) do
+    if level[1] >= fac then break end
+    gain, units = gain + (fac - level[1]) * level[2], units + level[2]
+  end
+  return gain, units, true
+end
+
+local function FullDiffCell(gain, known)
+  if not gain or gain <= 0 then return "-" end
+  return "|cff55ccff" .. ns.Money(gain):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") .. "|r"
+    .. (known and "" or " |cffaaaaaa+?|r")
+end
+
 -- Tooltip lines: every auction house's latest price.
 local function AHLines(id)
   local lines = {}
@@ -284,6 +315,7 @@ local function PriceRows()
   local shownMark = function(key) return key == ns.ahKey and "|cffffffff" or "|cffaaaaaa" end
   titles[2]:SetText(shownMark(factionKey) .. ns.AH_NAMES[faction] .. "|r")
   titles[3]:SetText(shownMark(goblinKey) .. "Goblin|r")
+  local totals = { items = 0, flat = 0, full = 0, units = 0, guessed = 0 }
   for _, id in ipairs(main.focusedList and ns.focusItems or ns.items) do
     local colored, name = ItemName(id)
     if filter == "" or name:lower():find(filter, 1, true) then
@@ -294,15 +326,29 @@ local function PriceRows()
       local fac, facT = ns:LatestAHPrice(id, factionKey)
       local gob, gobT = ns:LatestAHPrice(id, goblinKey)
       local diff = fac and gob and fac > 0 and gob / fac - 1 or nil
+      local flat = fac and gob and gob - fac or nil
+      local full, units, known = FullDiff(id, fac, gob, goblinKey)
+      local lines = AHLines(id)
+      if full then
+        totals.items, totals.flat, totals.full = totals.items + 1, totals.flat - flat, totals.full + full
+        totals.units = totals.units + units
+        if not known then totals.guessed = totals.guessed + 1 end
+        lines[#lines + 1] = known
+          and ("Full diff: %d cheaper on the goblin AH; buying them and selling at %s gains %s (%s after the 5%% cut)"):format(
+            units, ns.Money(fac), ns.Money(full), ns.SignedMoney(math.floor(units * fac * 0.95 - (units * fac - full) + 0.5)))
+          or "Full diff: only the goblin AH's lowest price is known (one item counted); deep-scan it for its price levels"
+      end
       rows[#rows + 1] = {
         id = id,
         icon = GetItemIcon(id),
-        tooltipLines = AHLines(id),
+        tooltipLines = lines,
         sort = {
           name = name,
           fac = fac or 1e15,
           gob = gob or 1e15,
           diff = diff or 1e15,
+          flat = flat or 1e15,
+          full = full or -1,
           median = st and st.median or 0,
           ratio = ratio or 99,
           qty = r and r.qty or -1,
@@ -315,6 +361,8 @@ local function PriceRows()
           PriceCell(fac, facT),
           PriceCell(gob, gobT),
           DiffCell(diff),
+          GoldDiffCell(flat),
+          FullDiffCell(full, known),
           st and ns.Money(st.median) or "-",
           Percent(ratio),
           r and r.qty or "-",
@@ -325,7 +373,7 @@ local function PriceRows()
     end
   end
   SortRows(rows, main.sortKey, main.sortDesc)
-  return rows
+  return rows, totals
 end
 
 local EVENT_TEXT = {
@@ -414,7 +462,13 @@ local function Refresh()
       or ("Full scan list (%d)"):format(#ns.items))
     main.clearFocused:SetShown(main.focusedList == true)
     main.prices.emptyText = main.focusedList and "The focused scan list is empty, or no items match." or "No items match."
-    main.prices:SetData(PriceRows())
+    local rows, totals = PriceRows()
+    main.prices:SetData(rows)
+    main.goblinTotals:SetText(totals.items == 0 and "|cffaaaaaaNo shown item is cheaper on the goblin auction house.|r"
+      or ("|cffffd100Cheaper on the goblin AH:|r %d items (of those shown).  Gold diff, one of each: %s.  "
+        .. "Full diff, every cheaper goblin listing (%d items): %s%s"):format(totals.items, ns.Money(totals.flat),
+        totals.units, ns.Money(totals.full),
+        totals.guessed > 0 and (" |cffaaaaaa(%d without goblin price levels: one item each)|r"):format(totals.guessed) or ""))
   elseif main.tab == "recipes" then
     main.refreshRecipes()
   elseif main.tab == "data" then
@@ -524,7 +578,7 @@ local function CreatePricesPage(page)
   local hint = Text(page, "GameFontDisableSmall")
   hint:SetPoint("TOPLEFT", 4, -4)
   hint:SetText("Click: details   Right-click: watch/unwatch   Ctrl-right-click: remove   Shift-click: link   "
-    .. "Hover: every auction house. Goblin diff: goblin price vs the faction one.")
+    .. "Hover: every auction house. Diffs: goblin vs faction (Full: every cheaper goblin listing).")
   main.filter = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
   main.filter:SetSize(140, 18)
   main.filter:SetPoint("TOPRIGHT", -4, 0)
@@ -558,6 +612,8 @@ local function CreatePricesPage(page)
     { title = "Faction", width = 95, justify = "RIGHT", key = "fac" },
     { title = "Goblin", width = 95, justify = "RIGHT", key = "gob" },
     { title = "Goblin diff", width = 75, justify = "RIGHT", key = "diff" },
+    { title = "Gold diff", width = 90, justify = "RIGHT", key = "flat" },
+    { title = "Full diff", width = 90, justify = "RIGHT", key = "full" },
     { title = "7-day median", width = 95, justify = "RIGHT", key = "median" },
     { title = "vs median", width = 75, justify = "RIGHT", key = "ratio" },
     { title = "Listed", width = 65, justify = "RIGHT", key = "qty" },
@@ -565,6 +621,11 @@ local function CreatePricesPage(page)
     { title = "Scanned", width = 70, justify = "RIGHT", key = "age" },
   }, PRICE_ROWS)
   main.prices:SetPoint("TOPLEFT", 0, -24)
+  -- totals over the shown items that are cheaper on the goblin auction house
+  main.goblinTotals = Text(page)
+  main.goblinTotals:SetPoint("TOPLEFT", main.prices, "BOTTOMLEFT", 4, -4)
+  main.goblinTotals:SetPoint("RIGHT", page, "RIGHT", -4, 0)
+  main.goblinTotals:SetJustifyH("LEFT")
   main.prices.emptyText = "No items match."
   main.prices.onSort = function(key)
     if main.sortKey == key then main.sortDesc = not main.sortDesc else main.sortKey, main.sortDesc = key, false end
