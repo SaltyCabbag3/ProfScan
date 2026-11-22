@@ -64,6 +64,101 @@ function ns:NotifyChanged()
   self.changeGen = self.changeGen + 1
 end
 
+-- Realm --------------------------------------------------------------------------------
+-- Since 2026-11-21 the client returns "" for GetRealmName (seen in the saved data: scans
+-- filed under "-Horde", characters as "Name-"). So the realm is remembered in db.realm
+-- whenever the client names it, taken from the saved data otherwise, and anything filed
+-- without it is moved back when the addon loads (RepairRealmKeys).
+local function Readable(value)
+  return type(value) == "string" and value ~= "" and not (issecretvalue and issecretvalue(value))
+end
+local function Squash(realm) return (realm:gsub("[%s%-']", "")) end
+
+-- The realm most saved scans and characters belong to ("<realm>-<faction>", "<name>-<realm>").
+local function RealmFromData(db)
+  local counts = {}
+  for i = 1, #db.log, 25 do -- a sample is plenty
+    local realm = type(db.log[i]) == "string" and db.log[i]:match("^(.-)%-%a+,")
+    if realm and realm ~= "" then counts[realm] = (counts[realm] or 0) + 1 end
+  end
+  for char in pairs(db.skills) do
+    local realm = char:match("^[^-]+%-(.+)$")
+    if realm then counts[realm] = (counts[realm] or 0) + 1 end
+  end
+  local best, n = nil, 0
+  for realm, c in pairs(counts) do
+    if c > n then best, n = realm, c end
+  end
+  return best
+end
+
+-- The realm's name: the client's when it gives one (and remembered), else the remembered
+-- one, unless the client's short realm name says this is another realm (then that name).
+function ns:Realm()
+  local realm = GetRealmName and GetRealmName()
+  if Readable(realm) then
+    self.db.realm = realm
+    return realm
+  end
+  local short = GetNormalizedRealmName and GetNormalizedRealmName()
+  local saved = self.db.realm
+  if saved and (not Readable(short) or Squash(saved) == Squash(short)) then return saved end
+  return Readable(short) and short or saved or ""
+end
+
+-- Moves data filed under an empty realm ("-Horde", "Name-") to `realm`; returns how many
+-- records and tables moved.
+local function RepairRealmKeys(db, realm)
+  if not Readable(realm) then return 0 end
+  local moved = 0
+  for _, list in ipairs({ db.log, db.watchLog, db.watchEvents, db.daily }) do
+    for i, line in ipairs(list) do
+      if type(line) == "string" and line:find("^%-%a+,") then
+        list[i] = realm .. line
+        moved = moved + 1
+      end
+    end
+  end
+  for _, faction in ipairs({ "Alliance", "Horde", "Neutral" }) do
+    local bad, good = "-" .. faction, realm .. "-" .. faction
+    local cov = db.coverage[bad] -- seconds watched per item and day: added together
+    if cov then
+      local into = db.coverage[good] or {}
+      db.coverage[good] = into
+      for id, days in pairs(cov) do
+        into[id] = into[id] or {}
+        for day, seconds in pairs(days) do into[id][day] = (into[id][day] or 0) + seconds end
+      end
+      db.coverage[bad] = nil
+      moved = moved + 1
+    end
+    local de = db.deScan[bad] -- the newer Disenchant scan wins
+    if de then
+      if not db.deScan[good] or (de.t or 0) > (db.deScan[good].t or 0) then db.deScan[good] = de end
+      db.deScan[bad] = nil
+      moved = moved + 1
+    end
+  end
+  -- characters saved as "Name-": known recipes are added, the higher skill wins
+  for _, store in ipairs({ db.known, db.skills }) do
+    local bad = {}
+    for char in pairs(store) do
+      if type(char) == "string" and char:sub(-1) == "-" then bad[#bad + 1] = char end
+    end
+    for _, char in ipairs(bad) do
+      local good = char .. realm
+      local into = store[good] or {}
+      store[good] = into
+      for k, v in pairs(store[char]) do
+        if type(v) == "number" and type(into[k]) == "number" then into[k] = math.max(into[k], v) else into[k] = v end
+      end
+      store[char] = nil
+      moved = moved + 1
+    end
+  end
+  return moved
+end
+
 function ns:ADDON_LOADED(name)
   if name ~= ADDON then return end
   ProfScanDB = ProfScanDB or {}
@@ -91,6 +186,10 @@ function ns:ADDON_LOADED(name)
   db.settings.keepDays = nil -- old automatic pruning setting, no longer used
   db.settings.craftOverhead = nil -- old time added between crafts, removed
   self.db = db
+  local realm = GetRealmName and GetRealmName()
+  if Readable(realm) then db.realm = realm end
+  db.realm = db.realm or RealmFromData(db)
+  self.realmRepairs = RepairRealmKeys(db, db.realm)
 end
 
 function ns:PLAYER_LOGIN()
@@ -101,6 +200,11 @@ function ns:PLAYER_LOGIN()
   for _, id in ipairs(self.focusItems) do GetItemInfo(id) end
   self:UpdateAHView()
   self:LoadData()
+  if (self.realmRepairs or 0) > 0 then
+    self.Print(("The game gave no realm name; moved %d records saved without one back to %s."):format(
+      self.realmRepairs, self.db.realm))
+    self.realmRepairs = nil
+  end
 end
 
 -- Asks for confirmation, then trims (see ns:Trim in Stats.lua).
@@ -305,7 +409,7 @@ ns.AH_FACTIONS = { "Alliance", "Horde", "Neutral" }
 ns.AH_NAMES = { Alliance = "Alliance", Horde = "Horde", Neutral = "Goblin" }
 
 function ns:AHKey(faction)
-  return GetRealmName() .. "-" .. faction
+  return self:Realm() .. "-" .. faction
 end
 
 -- "Alliance" | "Horde" | "Neutral" for a key.

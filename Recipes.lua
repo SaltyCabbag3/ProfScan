@@ -31,7 +31,7 @@ ns.recipesUsing = {} -- [reagent itemID] = { recipe, ... } (every recipe that us
 local CAPTURED_CATEGORY = "Seen in game"
 
 local function CharKey()
-  return UnitName("player") .. "-" .. GetRealmName()
+  return UnitName("player") .. "-" .. ns:Realm()
 end
 
 local function Pairs(flat)

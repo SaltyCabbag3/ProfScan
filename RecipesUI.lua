@@ -902,7 +902,7 @@ function ns.UI.BuildRecipesPage(page)
     end
     hiddenText:SetText(table.concat(notes, ",  "))
 
-    local hasKnown = ns.db.known[UnitName("player") .. "-" .. GetRealmName()] ~= nil
+    local hasKnown = ns.db.known[UnitName("player") .. "-" .. ns:Realm()] ~= nil
     known:SetEnabled(hasKnown)
     knownLabel:SetText(hasKnown and "Known only" or "|cff808080Known only|r")
   end
