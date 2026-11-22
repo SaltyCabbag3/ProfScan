@@ -499,7 +499,7 @@ local function UpdateControls(scanButtons, watchBtn)
 end
 
 local SCAN_TIPS = {
-  full = "Every item on the scan list (reagents, trade company items, and what you added; see the Data tab).",
+  full = "Every item on the scan list (reagents, trade company items, crafted consumables, and what you added; see the Data tab).",
   focused = "Only the items on the focused scan list, which you fill yourself: \"Focus recipes\" on the "
     .. "Professions tab, \"Focused scan\" on an item or recipe, or /pscan fadd. The Prices tab can show it.",
   quick = "Quick: lowest price and quantity listed, about 50 items per request.",

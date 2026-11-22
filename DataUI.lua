@@ -50,6 +50,7 @@ function ns.UI.BuildDataPage(page)
   local parts = {
     { "reagents", "scanReagents", "Every reagent of every recipe, plus herbs and fish" },
     { "trade", "scanTrade", "Trade company: crates, sealed writs, crate fills, writ items" },
+    { "crafted", "scanCrafted", "Crafted items you can't equip (potions, food, bags, parts)" },
     { "products", "scanProducts", "Every crafted product (~1,200 more items, mostly gear)" },
   }
   local checks = {}
@@ -66,7 +67,7 @@ function ns.UI.BuildDataPage(page)
 
   -- Trim ---------------------------------------------------------------------------------
   local trimTitle = UI.Text(page, "GameFontNormal")
-  trimTitle:SetPoint("TOPLEFT", 4, -214)
+  trimTitle:SetPoint("TOPLEFT", 4, -234)
   trimTitle:SetText("Trim old data")
   local trimHelp = UI.Text(page)
   trimHelp:SetPoint("TOPLEFT", trimTitle, "BOTTOMLEFT", 0, -6)

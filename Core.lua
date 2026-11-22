@@ -43,6 +43,7 @@ local DEFAULTS = {
   -- what the scan list is built from (see RebuildItems)
   scanReagents = true,     -- every reagent of every recipe, plus gathered herbs and fish
   scanTrade = true,        -- trade company items: empty crates, sealed writs, crate fills, writ items
+  scanCrafted = true,      -- crafted items you can't equip: potions, elixirs, food, bags, parts...
   scanProducts = false,    -- every crafted product (about 1,200 more items, mostly gear)
   -- which crafts ProfScan may suggest in crafting trees, routes and cheapest ways
   craftUse = {},           -- [profession] = false: never suggest crafting with it
@@ -132,8 +133,23 @@ end
 -- when ProfScan reads new recipes from your profession windows:
 --   settings.scanReagents  every reagent of every recipe, plus gathered herbs and fish
 --   settings.scanTrade     trade company items (empty crates, sealed writs, crate fills, writs and their items)
+--   settings.scanCrafted   crafted items you can't equip (consumables, trade goods, bags):
+--                          a product that no recipe uses as a reagent is on no other list
 --   settings.scanProducts  every crafted product (off by default: mostly gear)
 -- plus Items.lua and what you added in game, minus what you removed.
+
+-- Whether an item goes in an equipment slot (gear), from the client's item table, so it
+-- works for uncached items. nil for an item the client doesn't know (left out).
+local equipCache = {}
+local function Equippable(id)
+  if equipCache[id] == nil then
+    local GetInstant = C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant
+    local itemID, _, _, equipLoc = GetInstant(id)
+    if not itemID then return true end -- unknown to the client: not scanned (not cached either)
+    equipCache[id] = equipLoc ~= nil and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE"
+  end
+  return equipCache[id]
+end
 
 function ns:RebuildItems()
   local s = self.db.settings
@@ -155,7 +171,9 @@ function ns:RebuildItems()
           for _, reagent in ipairs(r.reagents) do Add(reagent[1]) end
           if r.gathered then Add(r.item) end
         end
-        if s.scanProducts and not r.gathered then Add(r.item) end
+        if not r.gathered and r.item > 0 and (s.scanProducts or (s.scanCrafted ~= false and not Equippable(r.item))) then
+          Add(r.item)
+        end
       end
     end
   end
@@ -240,7 +258,7 @@ function ns:ConfirmClearFocusScan()
 end
 
 -- Turns one part of the scan list on or off ("reagents" | "trade" | "products").
-local SCAN_PARTS = { reagents = "scanReagents", trade = "scanTrade", products = "scanProducts" }
+local SCAN_PARTS = { reagents = "scanReagents", trade = "scanTrade", crafted = "scanCrafted", products = "scanProducts" }
 function ns:SetScanPart(part, on)
   local key = SCAN_PARTS[part]
   if not key then return end
@@ -415,7 +433,7 @@ local HELP = {
   "/pscan favorgoal <favor> - Merchant's Favor you aim for; crates are priced for it (0 = off, default 1000)",
   "/pscan repgoal <reputation> - reputation you aim for with writs; envelopes are priced for it (0 = off)",
   "/pscan batch stack|<crafts> - how many crafts recipes are priced for at once (default: one stack)",
-  "/pscan scanlist reagents|trade|products on|off - what the scan list includes (default: reagents and trade on)",
+  "/pscan scanlist reagents|trade|crafted|products on|off - what the scan list includes (default: all but products)",
   "/pscan interval <seconds> - how often watch mode polls each item",
   "/pscan auto - toggle a quick scan whenever you open the auction house",
   "/pscan deals [days] - items cheapest right now compared with their median",
