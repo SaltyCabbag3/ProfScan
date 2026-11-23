@@ -59,7 +59,8 @@ ns.CostText = CostText
 
 local function SellText(e)
   if not e.sell then return "-" end
-  return ns.Money(e.sell) .. (e.sellVia == "vendor" and " |cffaaaaaav|r" or "")
+  return ns.Money(e.sell) .. (e.sellVia == "vendor" and " |cffaaaaaav|r"
+    or e.sellKey and ns.AHFaction(e.sellKey) == "Neutral" and " |cff55ccffg|r" or "")
 end
 ns.SellText = SellText
 
@@ -475,6 +476,86 @@ function ns.UI.ToggleCraftSettings(anchor)
   settingsPanel:Show()
 end
 
+-- Buy/sell sources panel -------------------------------------------------------------------
+-- Where recipes, crafting trees and plans may buy reagents and sell products
+-- (settings.buyFrom / settings.sellTo, see Pricing.lua).
+
+local sourcesPanel
+local SOURCE_ROWS = {
+  { key = "main", label = "Faction auction house", tip = "The auction house of your faction (or the shown one, when it is a faction's)." },
+  { key = "goblin", label = "Goblin auction house", tip = "Booty Bay, Gadgetzan, Everlook, Ratchet. Selling there loses 15%; prices over 3 days old are not used." },
+  { key = "vendor", label = "Vendors", tip = "Buying: prices learned when you open a merchant. Selling: what a vendor pays." },
+}
+
+local function BuildSources()
+  local UI = ns.UI
+  local panel = UI.Panel(nil, ProfScanFrame, 300, 0)
+  panel:SetFrameStrata("DIALOG")
+  panel:EnableMouse(true)
+  panel:Hide()
+  local title = UI.Text(panel, "GameFontNormal")
+  title:SetPoint("TOPLEFT", 12, -12)
+  title:SetText("Buy/sell sources")
+  local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
+  close:SetPoint("TOPRIGHT", -2, -2)
+  local help = UI.Text(panel)
+  help:SetPoint("TOPLEFT", 12, -30)
+  help:SetWidth(276)
+  help:SetText("Where recipes, crafting trees and plans may buy reagents and sell what they make. "
+    .. "With both auction houses on, a batch buys the cheapest listings of either, and each product is "
+    .. "sold where it nets most after the cut.")
+  local boxes = {}
+  local y = -30 - help:GetStringHeight() - 10
+  for _, side in ipairs({ { "buyFrom", "Buy from" }, { "sellTo", "Sell to" } }) do
+    local head = UI.Text(panel, "GameFontNormalSmall")
+    head:SetPoint("TOPLEFT", 12, y)
+    head:SetText(side[2])
+    y = y - 16
+    for _, row in ipairs(SOURCE_ROWS) do
+      local box = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+      box:SetSize(22, 22)
+      box:SetPoint("TOPLEFT", 14, y)
+      box.setting, box.key = side[1], row.key
+      box:SetScript("OnClick", function(self)
+        local s = ns.db.settings
+        s[self.setting] = s[self.setting] or {}
+        s[self.setting][self.key] = self:GetChecked() and true or false
+        ns:NotifyChanged()
+      end)
+      box:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(row.label)
+        GameTooltip:AddLine(row.tip, 1, 1, 1, true)
+        GameTooltip:Show()
+      end)
+      box:SetScript("OnLeave", GameTooltip_Hide)
+      local label = UI.Text(panel, "GameFontHighlightSmall")
+      label:SetPoint("LEFT", box, "RIGHT", 2, 0)
+      label:SetText(row.label)
+      boxes[#boxes + 1] = box
+      y = y - 22
+    end
+    y = y - 6
+  end
+  panel:SetHeight(-y + 8)
+  function panel.Refresh()
+    for _, box in ipairs(boxes) do
+      local s = ns.db.settings[box.setting] or {}
+      box:SetChecked(s[box.key] ~= false)
+    end
+  end
+  return panel
+end
+
+function ns.UI.ToggleSources(anchor)
+  sourcesPanel = sourcesPanel or BuildSources()
+  if sourcesPanel:IsShown() then return sourcesPanel:Hide() end
+  sourcesPanel:ClearAllPoints()
+  sourcesPanel:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
+  sourcesPanel.Refresh()
+  sourcesPanel:Show()
+end
+
 function ns.UI.BuildRecipesPage(page)
   local UI = ns.UI
   local state = { profName = nil, cat = 0, knownOnly = false, sortKey = "margin", sortDesc = true, perHour = false }
@@ -532,6 +613,24 @@ function ns.UI.BuildRecipesPage(page)
     GameTooltip:Show()
   end)
   settingsButton:SetScript("OnLeave", GameTooltip_Hide)
+  local sourcesButton = UI.Button(left, "Buy/sell sources...", 126, function(self) UI.ToggleSources(self) end)
+  sourcesButton:SetPoint("TOPLEFT", settingsButton, "BOTTOMLEFT", 0, -2)
+  sourcesButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Buy/sell sources")
+    local function List(which)
+      local s, on = ns.db.settings[which] or {}, {}
+      if s.main ~= false then on[#on + 1] = "faction AH" end
+      if s.goblin ~= false then on[#on + 1] = "goblin AH" end
+      if s.vendor ~= false then on[#on + 1] = "vendors" end
+      return #on > 0 and table.concat(on, ", ") or "nothing"
+    end
+    GameTooltip:AddLine("Where recipes may buy reagents and sell products.", 1, 1, 1, true)
+    GameTooltip:AddLine("Buy from: " .. List("buyFrom"), 0.2, 1, 0.6, true)
+    GameTooltip:AddLine("Sell to: " .. List("sellTo"), 0.2, 1, 0.6, true)
+    GameTooltip:Show()
+  end)
+  sourcesButton:SetScript("OnLeave", GameTooltip_Hide)
 
   local bulkLabel = UI.Text(left, "GameFontNormalSmall")
   bulkLabel:SetPoint("BOTTOMLEFT", 2, 100)

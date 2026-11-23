@@ -71,14 +71,21 @@ local function TreeRows(root, crafted)
     local unit = isCrafted and node.craftUnit or node.buy
     -- what buying this much costs, and why the average is what it is
     local lines = {}
+    local fromGoblin = false
     if node.buy and node.buyVia == "ah" then
-      local lowest = ns:LatestAHPrice(node.id)
+      local _, lowest = ns:BuyLevels(node.id)
       lines[1] = ("Buying %s: %s each on average (lowest listing %s)"):format(
         Qty(node.qty), ns.Money(node.buy), ns.Money(lowest))
+      local parts = {}
+      for key, n in pairs(node.buyFrom or {}) do
+        if ns.AHFaction(key) == "Neutral" then fromGoblin = true end
+        parts[#parts + 1] = ("%s on the %s AH"):format(Qty(n), ns.AH_NAMES[ns.AHFaction(key)] or key)
+      end
+      if #parts > 1 or fromGoblin then lines[#lines + 1] = "From: " .. table.concat(parts, ", ") end
       if node.depth == "short" then
-        lines[2] = "|cffff6060Fewer listed than needed at the known price levels; the rest is priced at the highest known level.|r"
+        lines[#lines + 1] = "|cffff6060Fewer listed than needed at the known price levels; the rest is priced at the highest known level.|r"
       elseif node.depth == "nodepth" then
-        lines[2] = "No recent price levels known (deep scan or watch this item); the lowest price is used for all."
+        lines[#lines + 1] = "No recent price levels on an auction house (deep scan or watch this item); its lowest price stands for any amount."
       end
     elseif node.buyVia == "vendor" then
       lines[1] = "Bought from a vendor: " .. ns.Money(node.buy) .. " each"
@@ -92,7 +99,7 @@ local function TreeRows(root, crafted)
       cells = {
         name,
         Qty(node.qty),
-        node.buy and (ns.Money(node.buy) .. (node.buyVia == "vendor" and " |cffaaaaaav|r" or "")
+        node.buy and (ns.Money(node.buy) .. (node.buyVia == "vendor" and " |cffaaaaaav|r" or fromGoblin and " |cff55ccffg|r" or "")
           .. (node.depth == "short" and " |cffff6060*|r" or node.depth == "nodepth" and " |cffaaaaaa~|r" or ""))
           or "|cffff8080no price|r",
         craft,

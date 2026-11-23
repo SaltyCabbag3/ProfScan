@@ -1,15 +1,19 @@
 local _, ns = ...
 
 --[[
-  Prices for the recipe views. All per unit, in copper, on the current auction house.
+  Prices for the recipe views. All per unit, in copper.
 
-  Buy price   the cheaper of the latest auction house price and a vendor's
-              price. Vendor prices are learned whenever you open a merchant
-              window (vials, thread, flux...), so recipes using them get a
-              complete cost once you have visited the vendor.
-  Sell price  the better of the auction house price after its cut (5%, 15% at
-              the goblin auction houses, see ns:AHCut) and the
-              price a vendor pays (from item info).
+  Sources     where reagents may be bought and products sold (Buy/sell sources on
+              the Professions tab; settings.buyFrom / settings.sellTo): the faction
+              auction house ("main": the shown one when it is a faction's, else your
+              own), the goblin one, and vendors. A goblin price over 3 days old is
+              not used (compare the Prices tab).
+  Buy price   the cheaper of the auction houses and a vendor's price. Buying many
+              walks up the enabled auction houses' price levels together, cheapest
+              first, so a batch can take some from each. Vendor prices are learned
+              whenever you open a merchant window (vials, thread, flux...).
+  Sell price  the best of each enabled auction house's price after its cut (5%,
+              15% at the goblin ones, see ns:AHCut) and the price a vendor pays.
   Yield       recipes that make several items per craft (bars, grenades,
               ammo) are costed per craft and earn price x average yield.
   Bonuses     crafting bonuses you set in Craft settings (settings.bonuses, see
@@ -157,19 +161,89 @@ end
 --   "nodepth"  no usable price levels (none known, or 6+ hours older than the latest
 --              lowest price); the lowest price is used for everything
 local STALE_LEVELS = 6 * 3600
+
+-- Buying and selling sources ------------------------------------------------------------
+local SOURCE_STALE = 3 * 86400 -- an extra auction house's price older than this is not used
+
+-- The faction auction house prices are based on: the shown one if it is a faction's,
+-- else your own (Alliance for a neutral character).
+function ns:MainAHKey()
+  local shown = self.AHFaction(self.ahKey)
+  local faction = shown ~= "Neutral" and shown or self:OwnAHFaction()
+  if faction == "Neutral" then faction = "Alliance" end
+  return self:AHKey(faction)
+end
+
+-- Enabled auction house keys for "buyFrom" or "sellTo", and whether vendors are on.
+function ns:Sources(which)
+  local s = self.db.settings[which] or {}
+  local keys = {}
+  if s.main ~= false then keys[#keys + 1] = self:MainAHKey() end
+  if s.goblin ~= false then
+    local goblin = self:AHKey("Neutral")
+    if goblin ~= keys[1] then keys[#keys + 1] = goblin end
+  end
+  return keys, s.vendor ~= false
+end
+
+-- Latest lowest price on one auction house if it may be used: an extra (non-main)
+-- auction house's must be at most SOURCE_STALE old.
+function ns:SourcePrice(id, key)
+  local price, t = self:LatestAHPrice(id, key)
+  if price and key ~= self:MainAHKey() and t and time() - t > SOURCE_STALE then return nil end
+  return price, t
+end
+
+-- Price levels to buy from on the enabled auction houses, merged cheapest first:
+-- { { price, qty, key }, ... }. An auction house without recent price levels stands for
+-- an unlimited supply at its lowest price. Also returns the lowest price, its time and
+-- key, and whether some auction house had no price levels. Cached until the data changes.
+local levelCache, levelGen = {}, -1
+function ns:BuyLevels(id)
+  if levelGen ~= self.changeGen then
+    wipe(levelCache)
+    levelGen = self.changeGen
+  end
+  local c = levelCache[id]
+  if c == nil then
+    local merged, best, bestT, bestKey, nodepth = {}, nil, nil, nil, false
+    for _, key in ipairs((self:Sources("buyFrom"))) do
+      local min, t = self:SourcePrice(id, key)
+      if min then
+        if not best or min < best then best, bestT, bestKey = min, t, key end
+        local levels, lt = self:Ladder(id, key)
+        if not levels or #levels == 0 or (t and lt and lt < t - STALE_LEVELS) then
+          merged[#merged + 1] = { min, math.huge, key }
+          nodepth = true
+        else
+          for _, level in ipairs(levels) do merged[#merged + 1] = { level[1], level[2], key } end
+        end
+      end
+    end
+    table.sort(merged, function(a, b) return a[1] < b[1] end)
+    c = best and { merged, best, bestT, bestKey, nodepth } or false
+    levelCache[id] = c
+  end
+  if not c then return nil end
+  return c[1], c[2], c[3], c[4], c[5]
+end
+
+-- Average price of buying qty along the enabled auction houses' levels, a flag (see
+-- above: nil | "short" | "nodepth") and how many come from each: { [key] = qty }.
 function ns:DepthPrice(id, qty)
-  local min, t = self:LatestAHPrice(id)
-  if not min then return nil end
-  if not qty or qty <= 1 then return min end
-  local levels, lt = self:Ladder(id)
-  if not levels or #levels == 0 or (t and lt and lt < t - STALE_LEVELS) then return min, "nodepth" end
-  local got, cost = 0, 0
+  local levels, min, _, minKey, nodepth = self:BuyLevels(id)
+  if not levels then return nil end
+  if not qty or qty <= 1 then return min, nil, { [minKey] = qty or 1 } end
+  local got, cost, from = 0, 0, {}
   for _, level in ipairs(levels) do
     local take = math.min(level[2], qty - got)
     got, cost = got + take, cost + take * level[1]
-    if got >= qty then return cost / qty end
+    from[level[3]] = (from[level[3]] or 0) + take
+    if got >= qty then return cost / qty, nodepth and "nodepth" or nil, from end
   end
-  return (cost + (qty - got) * levels[#levels][1]) / qty, "short"
+  local last = levels[#levels]
+  from[last[3]] = (from[last[3]] or 0) + qty - got
+  return (cost + (qty - got) * last[1]) / qty, "short", from
 end
 
 -- A price curve for buying many of an item, for planning bulk purchases:
@@ -177,14 +251,11 @@ end
 -- With no usable price levels the lowest price stands for an unlimited supply.
 -- Returns nil when there is no price at all.
 function ns:PriceCurve(id)
-  local min, t = self:LatestAHPrice(id)
-  local vendor = self:VendorBuyPrice(id)
+  local levels, min = self:BuyLevels(id)
+  local _, vendorOn = self:Sources("buyFrom")
+  local vendor = vendorOn and self:VendorBuyPrice(id) or nil
   if not min and not vendor then return nil end
-  local levels, lt = self:Ladder(id)
-  if min and (not levels or #levels == 0 or (t and lt and lt < t - STALE_LEVELS)) then
-    levels = { { min, math.huge } }
-  end
-  return { levels = min and levels or {}, vendor = vendor }
+  return { levels = levels or {}, vendor = vendor }
 end
 
 -- Total cost of buying the first q items along a curve (each unit at the cheaper
@@ -202,15 +273,16 @@ function ns.CurveCost(curve, q)
   return cost + (q - got) * rest
 end
 
--- Cheapest way to get `qty` (default 1): price per item, "ah" | "vendor",
--- time of the AH price, depth flag (see DepthPrice). Vendors never run out.
+-- Cheapest way to get `qty` (default 1) from the enabled sources: price per item,
+-- "ah" | "vendor", time of the lowest AH price, depth flag (see DepthPrice), and how many
+-- come from each auction house ({ [key] = qty }). Vendors never run out.
 function ns:BuyPrice(id, qty)
-  local ah, t = self:LatestAHPrice(id)
-  local flag
-  if ah and qty and qty > 1 then ah, flag = self:DepthPrice(id, qty) end
-  local vendor = self:VendorBuyPrice(id)
+  local ah, flag, from = self:DepthPrice(id, qty)
+  local _, _, t = self:BuyLevels(id)
+  local _, vendorOn = self:Sources("buyFrom")
+  local vendor = vendorOn and self:VendorBuyPrice(id)
   if vendor and (not ah or vendor <= ah) then return vendor, "vendor" end
-  if ah then return ah, "ah", t, flag end
+  if ah then return ah, "ah", t, flag, from end
 end
 
 -- How many crafts a recipe is priced for at once: your setting for the recipe,
@@ -296,13 +368,32 @@ function ns:SetBatchOverride(spell, crafts)
   self:NotifyChanged()
 end
 
--- Best money for one: net price, "ah" | "vendor", the AH price before the cut.
+-- The enabled auction house that pays most for one after its cut: net, price before the
+-- cut, its key.
+function ns:AHSellPrice(id)
+  local best, gross, bestKey
+  for _, key in ipairs((self:Sources("sellTo"))) do
+    local price = self:SourcePrice(id, key)
+    if price then
+      local net = math.floor(price * (1 - self:AHCut(key)))
+      if not best or net > best then best, gross, bestKey = net, price, key end
+    end
+  end
+  return best, gross, bestKey
+end
+
+-- What a vendor pays, if selling to vendors is on.
+function ns:VendorSellSource(id)
+  local _, vendorOn = self:Sources("sellTo")
+  return vendorOn and self:VendorSellPrice(id) or nil
+end
+
+-- Best money for one: net price, "ah" | "vendor", the AH price before the cut, its key.
 function ns:SellPrice(id)
-  local ah = self:LatestAHPrice(id)
-  local net = ah and math.floor(ah * (1 - self:AHCut()))
-  local vendor = self:VendorSellPrice(id)
-  if vendor and (not net or vendor >= net) then return vendor, "vendor", ah end
-  if net then return net, "ah", ah end
+  local net, ah, key = self:AHSellPrice(id)
+  local vendor = self:VendorSellSource(id)
+  if vendor and (not net or vendor >= net) then return vendor, "vendor", ah, key end
+  if net then return net, "ah", ah, key end
 end
 
 -- Per craft: cost of buying every reagent, items made (average), what they
@@ -329,9 +420,9 @@ function ns:RecipeEconomics(recipe, batch) -- batch: crafts to price for (defaul
   end
   e.complete = #recipe.reagents > 0 and e.missing == 0
   if recipe.item > 0 then
-    e.sell, e.sellVia, e.ahPrice = self:SellPrice(recipe.item)
-    e.ahNet = e.ahPrice and math.floor(e.ahPrice * (1 - self:AHCut()))
-    e.vendorSell = self:VendorSellPrice(recipe.item)
+    e.sell, e.sellVia = self:SellPrice(recipe.item)
+    e.ahNet, e.ahPrice, e.sellKey = self:AHSellPrice(recipe.item)
+    e.vendorSell = self:VendorSellSource(recipe.item)
   end
   if e.sell then e.revenue = math.floor(e.sell * e.yield) end
   if e.complete and e.revenue then
@@ -435,7 +526,7 @@ end
 CraftItem = function(self, id, qty, per, path)
   local node = { id = id, qty = qty, per = per }
   local _
-  node.buy, node.buyVia, _, node.depth = self:BuyPrice(id, qty)
+  node.buy, node.buyVia, _, node.depth, node.buyFrom = self:BuyPrice(id, qty)
   local makers = self.recipesByItem[id]
   if makers and not path[id] then
     path[id] = true

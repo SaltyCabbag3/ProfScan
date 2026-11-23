@@ -25,6 +25,11 @@ end
 local DEFAULTS = {
   trimDays = 30,    -- suggested age for the manual trim (Data tab); nothing is trimmed automatically
   ladderDepth = 15, -- cheapest price levels kept per item in a deep scan
+  -- smart scan (Scanner.lua): read an item's price levels again when they are older than
+  -- this, or the quick scan's lowest price / quantity moved by more than these shares
+  smartMaxAge = 5 * 3600,
+  smartPriceChange = 0.05,
+  smartQtyChange = 0.10,
   batchSize = 50,   -- item keys per batch search
   autoScan = false, -- run a quick scan every time the auction house opens
   focus = {},       -- item IDs followed by watch mode
@@ -43,6 +48,10 @@ local DEFAULTS = {
   -- what the scan list is built from (see RebuildItems)
   scanReagents = true,     -- every reagent of every recipe, plus gathered herbs and fish
   scanTrade = true,        -- trade company items: empty crates, sealed writs, crate fills, writ items
+  -- where recipes may buy and sell (Buy/sell sources on the Professions tab; see Pricing.lua):
+  -- main = the faction auction house, goblin = the neutral one, vendor = merchants
+  buyFrom = { main = true, goblin = true, vendor = true },
+  sellTo = { main = true, goblin = true, vendor = true },
   scanCrafted = true,      -- crafted items you can't equip: potions, elixirs, food, bags, parts...
   scanProducts = false,    -- every crafted product (about 1,200 more items, mostly gear)
   -- which crafts ProfScan may suggest in crafting trees, routes and cheapest ways
@@ -518,6 +527,7 @@ local HELP = {
   "/pscan - open or close the ProfScan window",
   "/pscan scan - full scan (quick): lowest price and quantity of every item on the scan list",
   "/pscan deep - full scan (deep): quick scan plus the cheapest price levels of each item (slower)",
+  "/pscan smart - full scan (smart): quick scan, then price levels only where they may have changed (fsmart: focused list)",
   "/pscan fscan - focused scan (quick): the same, for the focused scan list only",
   "/pscan fdeep - focused scan (deep)",
   "/pscan fadd <item link or ID> - add an item to / remove it from the focused scan list",
@@ -602,6 +612,10 @@ SlashCmdList.PROFSCAN = function(msg)
     ns:StartScan(false)
   elseif cmd == "deep" then
     ns:StartScan(true)
+  elseif cmd == "smart" then
+    ns:StartScan("smart")
+  elseif cmd == "fsmart" then
+    ns:StartScan("smart", true)
   elseif cmd == "fscan" then
     ns:StartScan(false, true)
   elseif cmd == "fdeep" then
