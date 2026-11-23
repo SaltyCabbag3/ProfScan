@@ -559,6 +559,9 @@ local SCAN_TIPS = {
   quick = "Quick: lowest price and quantity listed, about 50 items per request.",
   deep = "Deep: a quick scan, then each commodity's cheapest price levels (one request per item, slower). "
     .. "Crafting costs for more than a few crafts need these.",
+  smart = "Smart: a quick scan, then price levels only for items whose levels are new, over 5 hours old, or "
+    .. "whose lowest price (5%) or quantity (10%) moved since they were read; on a goblin auction house only "
+    .. "for items cheaper there. Much faster than deep when the market is calm.",
 }
 function ns.UI.ScanButtonTooltip(btn, deep, focused)
   btn:SetMotionScriptsWhileDisabled(true)
@@ -567,7 +570,8 @@ function ns.UI.ScanButtonTooltip(btn, deep, focused)
     GameTooltip:SetText(ns:ScanName(deep, focused))
     local n = focused and #ns.focusItems or #ns.items
     GameTooltip:AddLine(("%d items. %s"):format(n, focused and SCAN_TIPS.focused or SCAN_TIPS.full), 1, 1, 1, true)
-    GameTooltip:AddLine(deep and SCAN_TIPS.deep or SCAN_TIPS.quick, 0.8, 0.8, 0.8, true)
+    GameTooltip:AddLine(deep == "smart" and SCAN_TIPS.smart or deep and SCAN_TIPS.deep or SCAN_TIPS.quick,
+      0.8, 0.8, 0.8, true)
     if not ns.ahOpen then GameTooltip:AddLine("Open the auction house first.", 1, 0.4, 0.4) end
     GameTooltip:Show()
   end)
@@ -798,7 +802,7 @@ local function CreateMain()
   local anchor = watchBtn
   for _, b in ipairs({ -- right to left
     { "Focused deep", true, true }, { "Focused quick", false, true },
-    { "Full deep", true, false }, { "Full quick", false, false },
+    { "Full deep", true, false }, { "Full smart", "smart", false }, { "Full quick", false, false },
   }) do
     local btn = Button(main, b[1], 104, function() ns:StartScan(b[2], b[3]) end)
     btn:SetPoint("RIGHT", anchor, "LEFT", anchor == watchBtn and -12 or -4, 0)
@@ -841,7 +845,7 @@ local ahPanel
 local function CreateAHPanel()
   local host = AuctionHouseFrame or AuctionFrame
   if not host then return end
-  ahPanel = Panel(nil, host, 186, 284)
+  ahPanel = Panel(nil, host, 186, 336)
   ahPanel:SetPoint("TOPLEFT", host, "TOPRIGHT", 2, 0)
   ahPanel:SetClampedToScreen(true)
 
@@ -851,11 +855,11 @@ local function CreateAHPanel()
 
   local scanButtons, prev = {}, nil
   for _, b in ipairs({
-    { "Full scan (quick)", false, false }, { "Full scan (deep)", true, false },
-    { "Focused scan (quick)", false, true }, { "Focused scan (deep)", true, true },
+    { "Full scan (quick)", false, false }, { "Full scan (smart)", "smart", false }, { "Full scan (deep)", true, false },
+    { "Focused scan (quick)", false, true }, { "Focused scan (smart)", "smart", true }, { "Focused scan (deep)", true, true },
   }) do
     local btn = Button(ahPanel, b[1], 162, function() ns:StartScan(b[2], b[3]) end)
-    if prev then btn:SetPoint("TOP", prev, "BOTTOM", 0, b[3] and not scanButtons[3] and -10 or -4)
+    if prev then btn:SetPoint("TOP", prev, "BOTTOM", 0, b[3] and not scanButtons[4] and -10 or -4)
     else btn:SetPoint("TOP", 0, -30) end
     ns.UI.ScanButtonTooltip(btn, b[2], b[3])
     scanButtons[#scanButtons + 1], prev = btn, btn

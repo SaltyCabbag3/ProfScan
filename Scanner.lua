@@ -12,7 +12,7 @@ local _, ns = ...
   when there is no scan, watch mode (Watch.lua).
 
   Two lists can be scanned: the full scan list (ns.items) and the focused scan
-  list you fill yourself (ns.focusItems). Either can be scanned quick or deep.
+  list you fill yourself (ns.focusItems). Either can be scanned quick, deep or smart.
 
   Quick scan: C_AuctionHouse.SearchForItemKeys takes a whole list of items and
   answers with one row per item (lowest price + total quantity listed). One
@@ -20,6 +20,20 @@ local _, ns = ...
 
   Deep scan: after the quick scan, one SendSearchQuery per commodity, reading
   the cheapest listings to build a price ladder ("price:quantity" levels).
+  Almost all of a deep scan's time is these one-per-item requests (the server
+  paces them); reading fewer listings per item would save nothing.
+
+  Smart scan: a quick scan, then a deep search only for the commodities whose
+  price levels are worth reading again (ns:SmartDeepReason):
+    - none known yet, or the known ones are older than settings.smartMaxAge
+      (5 hours: price levels over 6 hours older than the latest price are not
+      used for costs, see Pricing.lua);
+    - the quick scan's lowest price moved more than settings.smartPriceChange
+      (5%) or the quantity listed more than settings.smartQtyChange (10%, and
+      over 5 items) since the scan that read the known levels;
+    - on a goblin auction house, only items cheaper there than on the faction one.
+  Deep searches go in order of how many recipes use the item, so a scan stopped
+  early has the most used reagents done.
 
   Disenchant scan: browses the auction house for uncommon, rare and epic
   weapons and armor (one SendBrowseQuery per quality, all pages), keeping the
@@ -178,8 +192,36 @@ local function ScanFail()
   scan.failed = scan.failed + 1
 end
 
--- deep: also read price levels. focused: true = the focused scan list instead of the
--- full one; "disenchant" = the Disenchant scan (gear by browsing, then the enchanting materials).
+-- Why a smart scan reads an item's price levels again ("new" | "old" | "changed" | "cheaper"),
+-- or nil and why not ("unlisted" | "notCheaper" | "unchanged"). quick = this scan's
+-- { min =, qty = } for the item on auction house `key`.
+function ns:SmartDeepReason(key, id, quick)
+  if not quick or quick.qty <= 0 or quick.min <= 0 then return nil, "unlisted" end
+  local s = self.db.settings
+  local goblin = self.AHFaction(key) == "Neutral"
+  if goblin then
+    local main = self:LatestAHPrice(id, self:MainAHKey())
+    if main and quick.min >= main then return nil, "notCheaper" end
+  end
+  local stored = self.ladders[key] and self.ladders[key][id]
+  if not stored then return goblin and "cheaper" or "new" end
+  if time() - stored.t > (s.smartMaxAge or 5 * 3600) then return "old" end
+  -- this quick result against the scan that read those levels
+  local raw, past = self.index[key] and self.index[key][id], nil
+  for i = #(raw or {}), 1, -1 do
+    if raw[i].t == stored.t then past = raw[i] break end
+    if raw[i].t < stored.t then break end
+  end
+  if not past or past.min <= 0 then return "changed" end
+  if math.abs(quick.min - past.min) / past.min > (s.smartPriceChange or 0.05) then return "changed" end
+  local dq = math.abs(quick.qty - past.qty)
+  if dq > 5 and dq > past.qty * (s.smartQtyChange or 0.10) then return "changed" end
+  return nil, "unchanged"
+end
+
+-- deep: true = also read price levels, "smart" = only where they may have changed (see
+-- above). focused: true = the focused scan list instead of the full one; "disenchant" =
+-- the Disenchant scan (gear by browsing, then the enchanting materials).
 function ns:StartScan(deep, focused)
   local disenchant = focused == "disenchant"
   if disenchant then deep = true end
@@ -217,7 +259,17 @@ function ns:StartScan(deep, focused)
     jobs[#jobs + 1] = { kind = "batch", owner = "scan", ids = ids, set = set, onResult = BatchResult, onFail = ScanFail }
   end
   if deep then
-    for _, id in ipairs(items) do
+    -- most used reagents first, so a scan stopped early has them
+    local order, uses = {}, {}
+    for i, id in ipairs(items) do
+      order[i] = id
+      uses[id] = #(self.recipesUsing[id] or {})
+    end
+    table.sort(order, function(a, b)
+      if uses[a] ~= uses[b] then return uses[a] > uses[b] end
+      return a < b
+    end)
+    for _, id in ipairs(order) do
       jobs[#jobs + 1] = {
         kind = "commodity", owner = "scan", id = id, levels = self.db.settings.ladderDepth,
         onResult = DeepResult, onFail = ScanFail,
@@ -231,6 +283,7 @@ function ns:StartScan(deep, focused)
     results = {}, -- [itemID] = { min =, qty =, ladder = }
     covered = {}, -- [itemID] = true once a batch containing it came back
     failed = 0,
+    smart = deep == "smart" and { deep = 0 } or nil, -- smart scan: how many of each reason / skip
   }
   self.Print(("%s: %d items..."):format(self:ScanName(deep, focused), #items))
   self:NotifyChanged()
@@ -246,7 +299,8 @@ end
 
 function ns:ScanName(deep, focused)
   if focused == "disenchant" then return "Disenchant scan" end
-  return (focused and "Focused scan" or "Full scan") .. (deep and " (deep)" or " (quick)")
+  return (focused and "Focused scan" or "Full scan")
+    .. (deep == "smart" and " (smart)" or deep and " (deep)" or " (quick)")
 end
 
 function ns:ScanStatus()
@@ -267,7 +321,14 @@ local function NextScanJob()
     -- and there is nothing to read for items the quick scan found unlisted.
     local info, quick = KeyInfo(job.id), s.results[job.id]
     if info and info.isCommodity and not (s.covered[job.id] and not (quick and quick.qty > 0)) then
-      return job
+      if not s.smart then return job end
+      local reason, skip = ns:SmartDeepReason(s.key, job.id, quick)
+      local count = reason or skip
+      s.smart[count] = (s.smart[count] or 0) + 1
+      if reason then
+        s.smart.deep = s.smart.deep + 1
+        return job
+      end
     end
   end
 end
@@ -295,6 +356,16 @@ function ns:FinishScan(reason)
   self.Print(("%s %s: %d items saved in %.1fs%s."):format(
     self:ScanName(s.deep, s.focused), reason or "done", saved, GetTime() - s.started,
     s.failed > 0 and (", " .. s.failed .. " requests failed") or ""))
+  if s.smart then
+    local m = s.smart
+    local parts = {}
+    for _, k in ipairs({ { "new", "new" }, { "old", "old" }, { "changed", "changed" }, { "cheaper", "cheaper on goblin" },
+                         { "unchanged", "unchanged" }, { "notCheaper", "not cheaper on goblin" } }) do
+      if m[k[1]] then parts[#parts + 1] = ("%d %s"):format(m[k[1]], k[2]) end
+    end
+    self.Print(("Smart scan: %d price ladders read again (%s)."):format(m.deep,
+      #parts > 0 and table.concat(parts, ", ") or "nothing to compare"))
+  end
   self:NotifyChanged()
 end
 
