@@ -26,10 +26,13 @@ local DEFAULTS = {
   trimDays = 30,    -- suggested age for the manual trim (Data tab); nothing is trimmed automatically
   ladderDepth = 15, -- cheapest price levels kept per item in a deep scan
   -- smart scan (Scanner.lua): read an item's price levels again when they are older than
-  -- this, or the quick scan's lowest price / quantity moved by more than these shares
+  -- this, or the quick scan's lowest price moved by more than this share and amount, or
+  -- the quantity listed by more than this share and number
   smartMaxAge = 5 * 3600,
   smartPriceChange = 0.05,
-  smartQtyChange = 0.10,
+  smartPriceFloor = 50,
+  smartQtyChange = 1.0,
+  smartQtyFloor = 50,
   batchSize = 50,   -- item keys per batch search
   autoScan = false, -- run a quick scan every time the auction house opens
   focus = {},       -- item IDs followed by watch mode
@@ -192,6 +195,7 @@ function ns:ADDON_LOADED(name)
   for k, v in pairs(DEFAULTS) do
     if db.settings[k] == nil then db.settings[k] = v end
   end
+  if db.settings.smartQtyChange == 0.10 then db.settings.smartQtyChange = 1.0 end -- first release's limit, too low
   db.settings.keepDays = nil -- old automatic pruning setting, no longer used
   db.settings.craftOverhead = nil -- old time added between crafts, removed
   self.db = db

@@ -28,9 +28,13 @@ local _, ns = ...
     - none known yet, or the known ones are older than settings.smartMaxAge
       (5 hours: price levels over 6 hours older than the latest price are not
       used for costs, see Pricing.lua);
-    - the quick scan's lowest price moved more than settings.smartPriceChange
-      (5%) or the quantity listed more than settings.smartQtyChange (10%, and
-      over 5 items) since the scan that read the known levels;
+    - since the scan that read the known levels, the quick scan's lowest price
+      moved more than settings.smartPriceChange (5%) and by at least
+      settings.smartPriceFloor (50 copper), or the quantity listed doubled or
+      halved (settings.smartQtyChange 1) and changed by over settings.smartQtyFloor (50).
+      Measured on 1-2 hour old Horde scans: quantities move a lot (median 15%,
+      a quarter over 35%) and cheap items jump by single coppers, so smaller
+      limits re-read most items; these read about a quarter of them;
     - on a goblin auction house, only items cheaper there than on the faction one.
   Deep searches go in order of how many recipes use the item, so a scan stopped
   early has the most used reagents done.
@@ -213,9 +217,12 @@ function ns:SmartDeepReason(key, id, quick)
     if raw[i].t < stored.t then break end
   end
   if not past or past.min <= 0 then return "changed" end
-  if math.abs(quick.min - past.min) / past.min > (s.smartPriceChange or 0.05) then return "changed" end
-  local dq = math.abs(quick.qty - past.qty)
-  if dq > 5 and dq > past.qty * (s.smartQtyChange or 0.10) then return "changed" end
+  local dp = math.abs(quick.min - past.min)
+  if dp > past.min * (s.smartPriceChange or 0.05) and dp >= (s.smartPriceFloor or 50) then return "changed" end
+  -- quantity: grew or shrank by the factor 1 + smartQtyChange (2 = doubled or halved)
+  local dq, factor = math.abs(quick.qty - past.qty), 1 + (s.smartQtyChange or 1)
+  local ratio = quick.qty / math.max(past.qty, 1)
+  if dq > (s.smartQtyFloor or 50) and (ratio >= factor or ratio <= 1 / factor) then return "changed" end
   return nil, "unchanged"
 end
 

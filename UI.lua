@@ -560,8 +560,8 @@ local SCAN_TIPS = {
   deep = "Deep: a quick scan, then each commodity's cheapest price levels (one request per item, slower). "
     .. "Crafting costs for more than a few crafts need these.",
   smart = "Smart: a quick scan, then price levels only for items whose levels are new, over 5 hours old, or "
-    .. "whose lowest price (5%) or quantity (10%) moved since they were read; on a goblin auction house only "
-    .. "for items cheaper there. Much faster than deep when the market is calm.",
+    .. "whose lowest price (5% and 50c) or quantity (doubled or halved, 50+) moved since they were read; on a "
+    .. "goblin auction house only for items cheaper there. About a third of a deep scan's requests.",
 }
 function ns.UI.ScanButtonTooltip(btn, deep, focused)
   btn:SetMotionScriptsWhileDisabled(true)
