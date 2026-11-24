@@ -113,6 +113,24 @@ def load_forever_tables(path):
 # value; the skill-up colours (trivial ranks) are unchanged.
 FOREVER_REMOVED = {2330, 2337, 3447, 7181, 11457, 17556}
 FOREVER_ADDED = {
+    # Forever recipes AtlasLoot doesn't list: reagents and products from the game's SpellReagents
+    # and SpellEffect tables, learn levels from Wowhead's Forever data and the Forever wiki
+    # (2026-11-24). Left out: seven alchemy spells whose products aren't in Forever's item table
+    # (Season of Discovery leftovers such as Insulating Gniodine and the Nightmare flasks).
+    "Alchemy": [("New in Forever", [
+        (1245246, 247754, 1, [(2447, 1), (3371, 1)], 1, "Minor Arcane Elixir"),
+        (1245250, 247755, 1, [(765, 1), (3371, 1)], 1, "Elixir of Minor Force"),
+        (1230564, 279956, 20, [(2447, 1), (3371, 1)], 1, "Mana Well"),
+        (1249630, 249409, 40, [(249399, 2), (3371, 1)], 1, "Cerulean Dye"),
+        (1249633, 249410, 40, [(249391, 2), (3371, 1)], 1, "Sulfuric Acid"),
+        (1244645, 247239, 85, [(3371, 1), (2450, 1), (730, 1)], 1, "Lesser Discolored Healing Potion"),
+        (1249631, 249430, 120, [(249424, 2), (3372, 1)], 1, "Magenta Dye"),
+        (1244646, 247240, 135, [(3372, 1), (2453, 1), (730, 1)], 1, "Discolored Healing Potion"),
+        (1244647, 247241, 175, [(3372, 1), (3356, 1), (730, 1)], 1, "Greater Discolored Healing Potion"),
+        (1249632, 249431, 215, [(249274, 2), (8925, 1)], 1, "Viridian Dye"),
+        (1244648, 247242, 230, [(8925, 1), (8838, 1), (730, 1)], 1, "Superior Discolored Healing Potion"),
+        (1231583, 241650, 250, [(8925, 1), (13466, 1), (730, 1)], 1, "Major Discolored Healing Potion"),
+    ])],
     "First Aid": [("Healing Potions", [
         # spell, item, skill, reagents, made, name
         (1244436, 13446, 275, [(8925, 1), (3713, 3), (13464, 1)], 1, "Major Healing Potion"),
@@ -234,14 +252,15 @@ def forever_skills(tables, spells, game, addons):
     for r in game["SkillLineAbility"]:
         if int(r["TrivialSkillLineRankLow"]) > 0:
             yellow[(int(r["SkillLine"]), int(r["Spell"]))] = int(r["TrivialSkillLineRankLow"])
-    item_req, by_name = {}, {}
+    item_req, by_name, item_names = {}, defaultdict(set), {}
     for r in game["ItemSparse"]:
         title = r["Display_lang"]
+        item_names[int(r["ID"])] = title
         if r["RequiredSkill"] != "0" and not re.search(r"\bOLD\b|^Deprecated|^zz", title):
             line, rank = int(r["RequiredSkill"]), int(r["RequiredSkillRank"])
             item_req[int(r["ID"])] = (line, rank)
             if ": " in title:  # "Pattern: Wild Leather Cloak" -> (165, "Wild Leather Cloak")
-                by_name.setdefault((line, title.split(": ", 1)[1]), rank)
+                by_name[(line, title.split(": ", 1)[1])].add(rank)
     teach = defaultdict(set)
     text = (addons / "AtlasLootContinued" / "Data" / "Recipe.lua").read_text(encoding="utf-8")
     for item, spell in re.findall(r"\[(\d+)\]\s*=\s*\{\s*\d+\s*,\s*\d+\s*,\s*(\d+)\s*\}", text):
@@ -266,8 +285,13 @@ def forever_skills(tables, spells, game, addons):
                 top = yellow.get((line, spell))
                 skill = source = None
                 # the pattern named after the recipe first, else any item AtlasLoot says teaches it
-                ranks = [by_name[(line, name)]] if (line, name) in by_name else \
+                ranks = sorted(by_name[(line, name)]) if (line, name) in by_name else \
                     [item_req[i][1] for i in teach.get(spell, ()) if item_req.get(i, (0,))[0] == line]
+                if len(ranks) > 1 and top:
+                    # two recipe items with one name, e.g. "Recipe: Lesser Arcane Elixir" for Season of
+                    # Discovery (190) and for Forever (120, yellow 125): the highest one not past yellow
+                    fits = [r for r in ranks if r <= top]
+                    ranks = [max(fits)] if fits else ranks
                 if ranks:
                     skill, source = min(ranks), "item"
                 if skill is None:
@@ -276,8 +300,17 @@ def forever_skills(tables, spells, game, addons):
                     # "Elixir of Greater Defense" in AtlasLoot (195); 2167 is "Gray Leather Boots"
                     # in game (75) and "Dark Leather Boots" in AtlasLoot (a new recipe, at 35).
                     # The value nearest the yellow skill wins, as for names listed twice.
-                    rows = [s for k in {name, comment} - {None, ""} for s, src in wiki.get(k, ())
-                            if src not in ("?", "")]
+                    # also by what it makes, and AtlasLoot's comments cut at an apostrophe ("Elixir of
+                    # Lion", "Major Troll") by the one wiki name that continues them: Forever renamed
+                    # spell and item 2329 "Elixir of Minor Strength", the wiki keeps "Elixir of Lion's
+                    # Strength" (15)
+                    product = item_names.get(info.get("created") or 0)
+                    keys = {name, comment, product} - {None, ""}
+                    if comment and comment not in wiki:
+                        longer = [k for k in wiki if k.startswith(comment + "'")]
+                        if len(longer) == 1:
+                            keys.add(longer[0])
+                    rows = [s for k in keys for s, src in wiki.get(k, ()) if src not in ("?", "")]
                     if len(set(rows)) > 1 and top:  # same name twice (old and new version): the one nearest yellow
                         rows = [min(rows, key=lambda s: abs(top - 20 - s))]
                     if rows:
