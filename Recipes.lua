@@ -383,9 +383,57 @@ function ns:SourceText(recipe)
   return "Learned from: |cffffffff" .. s .. "|r"
 end
 
--- The source line, then the lock lines.
+-- Skill-up thresholds: orange (learn), yellow, green, grey, or nil when unknown. Yellow and
+-- grey come from the game's tables (RecipeSkill.lua), green is halfway between them, and
+-- orange is the skill needed to learn it (RecipeData.lua). A recipe learned past its
+-- yellow is yellow from the start.
+function ns:SkillThresholds(recipe)
+  local t = recipe and recipe.spell and self.RECIPE_SKILL and self.RECIPE_SKILL[recipe.spell]
+  if not t then return nil end
+  local orange = math.max(recipe.skill or 1, 1)
+  local yellow = math.max(t[1], orange)
+  local grey = math.max(t[2], yellow)
+  local green = math.max(math.floor((yellow + grey) / 2), yellow)
+  return orange, yellow, green, grey
+end
+
+-- Chance of a skill-up per craft at `skill` (the Classic rule): certain below yellow,
+-- then falling evenly to none at grey.
+function ns:SkillUpChance(recipe, skill)
+  local orange, yellow, _, grey = self:SkillThresholds(recipe)
+  if not orange or not skill or skill < orange or skill >= grey then return orange and skill and 0 or nil end
+  if skill < yellow then return 1 end
+  return (grey - skill) / (grey - yellow)
+end
+
+local SKILL_COLORS = { "ff8040", "ffff00", "40c040", "808080" }
+
+-- "Skill: 125 / 125 / 128 / 130" in the four colors, and where your character stands.
+function ns:SkillLine(recipe)
+  local values = { self:SkillThresholds(recipe) }
+  if #values == 0 then return nil end
+  local parts = {}
+  for i, v in ipairs(values) do parts[i] = ("|cff%s%d|r"):format(SKILL_COLORS[i], v) end
+  local text = "Skill: " .. table.concat(parts, " / ") .. " |cffaaaaaa(learn, yellow, green, grey)|r"
+  local mine = recipe.profession and self:ProfessionSkill(recipe.profession)
+  if mine then
+    local chance = self:SkillUpChance(recipe, mine)
+    if mine < values[1] then
+      text = text .. ("  You: %d, learn at %d"):format(mine, values[1])
+    elseif chance and chance > 0 then
+      text = text .. ("  You: %d, %d%% skill-up chance"):format(mine, math.floor(chance * 100 + 0.5))
+    else
+      text = text .. ("  You: %d, no skill-ups"):format(mine)
+    end
+  end
+  return text
+end
+
+-- The source line and the skill line, then the lock lines.
 function ns:RecipeInfoLines(recipe, withInfo)
   local lines = self:LockLines(recipe, withInfo)
+  local skill = self:SkillLine(recipe)
+  if skill then table.insert(lines, 1, skill) end
   local source = self:SourceText(recipe)
   if source then table.insert(lines, 1, source) end
   return lines

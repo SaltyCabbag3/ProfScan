@@ -8,6 +8,7 @@
 
 Items.lua
 RecipeData.lua
+RecipeSkill.lua
 RecipeLocks.lua
 TradeData.lua
 DisenchantData.lua
