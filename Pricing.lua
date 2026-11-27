@@ -731,3 +731,18 @@ function ns.FlattenTree(root)
   for _, child in ipairs(root.children) do Walk(child, 0) end
   return rows
 end
+
+-- Public API ---------------------------------------------------------------------------------
+-- Read-only access for other addons (FarmScout values loot with it).
+ProfScanAPI = {
+  version = 1,
+  -- What one item sells for after the cut, on the enabled sell sources or to a vendor
+  -- (see Sources above): net copper, "ah" | "vendor", and how many were listed on the
+  -- faction auction house in its latest scan. nil before ProfScan has loaded or priced it.
+  SellValue = function(itemID)
+    if not (ns.db and itemID) then return nil end
+    local net, via = ns:SellPrice(itemID)
+    local raw = ns.index and ns.index[ns:MainAHKey()] and ns.index[ns:MainAHKey()][itemID]
+    return net, via, raw and #raw > 0 and raw[#raw].qty or nil
+  end,
+}
