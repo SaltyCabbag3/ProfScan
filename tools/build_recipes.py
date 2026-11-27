@@ -327,6 +327,31 @@ def forever_skills(tables, spells, game, addons):
     return used
 
 
+def wowhead_skills(spells):
+    """Wowhead's Forever data wins where it has a learn level: tools/wowhead/<Profession>.txt,
+    "spell:learnedat:orange,yellow,green,grey;..." copied from wowhead.com/forever/spells/
+    professions/<profession> (the list's data). For some plans the client's item still asks for
+    Classic's skill while Forever wants 25 more (Ebon Shiv 230 -> 255, Ornate Thorium Handaxe
+    250 -> 275); the Forever wiki agrees with Wowhead there. An orange of 0 means Wowhead doesn't
+    know the learn level: the value found above stays, capped at the yellow skill.
+    Returns {profession: changed count}."""
+    changed = {}
+    for path in sorted((HERE / "wowhead").glob("*.txt")):
+        n = 0
+        for part in path.read_text(encoding="utf-8").strip().split(";"):
+            spell, _learned, colors = part.split(":")
+            orange, yellow = (int(c) for c in colors.split(",")[:2])
+            info = spells.get(int(spell))
+            if not info:
+                continue
+            skill = orange if orange > 0 else min(info["skill"], yellow) if yellow > 0 else info["skill"]
+            if skill != info["skill"]:
+                info["skill"] = skill
+                n += 1
+        changed[path.stem] = n
+    return changed
+
+
 # How each recipe is learned ------------------------------------------------------
 
 BIND = {"0": "BoE", "2": "BoE", "1": "BoP", "3": "BoU", "4": "quest item"}  # ItemSparse.Bonding (0 = never binds)
@@ -451,6 +476,8 @@ def main():
     print(f"{fill_reagents(spells, game)} recipes without reagents in AtlasLoot took them from the game's tables")
     for prof, counts in forever_skills(tables, spells, game, addons).items():
         print(f"{prof:15} skill: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    for prof, n in wowhead_skills(spells).items():
+        print(f"{prof:15} skill: {n} changed to Wowhead's Forever learn level")
     for prof, counts in forever_sources(tables, spells, game, addons).items():
         print(f"{prof:15} source: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
 
